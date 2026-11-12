@@ -1,0 +1,4 @@
+broker indisponivel: health=200; ready=503
+broker restabelecido: ready=200
+db indisponivel: health=200; ready=503
+db restabelecido: ready=200

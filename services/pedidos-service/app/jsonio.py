@@ -6,6 +6,25 @@ from uuid import UUID
 import simplejson
 
 
+def validar_texto(valor):
+    if "\x00" in valor:
+        raise ValueError("Texto contém caractere nulo")
+    valor.encode("utf-8")
+    return valor
+
+
+def validar_textos_json(objeto):
+    if isinstance(objeto, str):
+        validar_texto(objeto)
+    elif isinstance(objeto, dict):
+        for chave, valor in objeto.items():
+            validar_texto(chave)
+            validar_textos_json(valor)
+    elif isinstance(objeto, list):
+        for valor in objeto:
+            validar_textos_json(valor)
+
+
 def formato_json(valor):
     if isinstance(valor, datetime):
         return valor.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")

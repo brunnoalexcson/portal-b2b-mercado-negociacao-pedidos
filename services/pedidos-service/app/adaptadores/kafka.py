@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
 from uuid import NAMESPACE_URL, uuid5
 
@@ -11,7 +12,9 @@ from app.jsonio import dumps, loads
 
 log = logging.getLogger(__name__)
 TOPICOS_NECESSARIOS = set(TOPICOS) | {"pedido_criado", "pedidos.dlt"}
-SENSIVEIS = {"token", "authorization", "senha", "password", "accesstoken", "refreshtoken", "secret"}
+SENSIVEIS = {"token", "authorization", "senha", "password", "accesstoken", "refreshtoken", "secret",
+             "apikey", "clientsecret"}
+SENSIVEL_TEXTO = re.compile(r"authorization|bearer|token|senha|password|secret|api[_-]?key", re.IGNORECASE)
 
 
 def redigir(dados):
@@ -20,7 +23,27 @@ def redigir(dados):
                 else redigir(v) for k, v in dados.items()}
     if isinstance(dados, list):
         return [redigir(v) for v in dados]
+    if isinstance(dados, str) and SENSIVEL_TEXTO.search(dados):
+        return "[omitido: texto com possível credencial]"
     return dados
+
+
+def original_dlt(bruto, dados):
+    if dados is None:
+        try:
+            dados = loads((bruto or b"").decode("utf-8"))
+        except (ValueError, RecursionError):
+            texto = (bruto or b"").decode("utf-8", errors="replace")
+            # Sem estrutura confiável, omite o texto inteiro se houver sinal
+            # de credencial; não tenta adivinhar onde o valor termina.
+            if SENSIVEL_TEXTO.search(texto) or "\\u" in texto.lower():
+                texto = "[omitido: texto malformado com possível credencial]"
+            return texto.encode("utf-8")[:64 * 1024].decode("utf-8", errors="ignore")
+    original = redigir(dados)
+    serializado = dumps(original).encode("utf-8", errors="backslashreplace")
+    if len(serializado) > 64 * 1024:
+        return serializado[:64 * 1024].decode("utf-8", errors="ignore")
+    return original
 
 
 class Kafka:
@@ -91,9 +114,7 @@ class Kafka:
         if not isinstance(correlacao, str) or not correlacao.strip() or len(correlacao) > 128:
             correlacao = event_id
         try:
-            original = redigir(dados)
-            if len(dumps(original).encode()) > 64 * 1024:
-                original = {"referencia": origem, "conteudo": "excedeu o limite da DLT"}
+            original = original_dlt(mensagem.value, dados)
         except RecursionError:
             original = None
         falha = {
@@ -104,7 +125,8 @@ class Kafka:
                         "stackTrace": "", "failedAtAttempt": 1, "referencia": origem},
         }
         await asyncio.wait_for(
-            produtor.send_and_wait("pedidos.dlt", dumps(falha).encode(), key=chave.encode()), timeout=5
+            produtor.send_and_wait("pedidos.dlt", dumps(falha).encode("utf-8", "backslashreplace"),
+                                   key=chave.encode()), timeout=5
         )
 
     async def _publicar_outbox(self, produtor):

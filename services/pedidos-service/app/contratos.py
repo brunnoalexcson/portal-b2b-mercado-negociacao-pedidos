@@ -4,9 +4,11 @@ from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, BeforeValidator, Field
+from pydantic import AfterValidator, BaseModel, BeforeValidator, Field
 
-Id = Annotated[str, Field(strict=True, min_length=1, max_length=64, pattern=r"\S")]
+from app.jsonio import validar_texto, validar_textos_json
+
+Id = Annotated[str, Field(strict=True, min_length=1, max_length=64, pattern=r"\S"), AfterValidator(validar_texto)]
 Unidade = Literal["KG", "TON", "UN", "CX", "L"]
 TipoTransporte = Literal["GRANEL", "REFRIGERADO", "CARGA_SECA", "PERIGOSO"]
 UF = Literal["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
@@ -86,6 +88,7 @@ CORRELACAO_HTTP = re.compile(r"[A-Za-z0-9._-]{1,128}")
 
 
 def validar_evento(topico, chave, dados):
+    validar_textos_json(dados)
     origem, id_campo, modelo = TOPICOS[topico]
     evento = Envelope.model_validate(dados)
     if (evento.eventType != topico or evento.source != origem or evento.aggregateId != chave

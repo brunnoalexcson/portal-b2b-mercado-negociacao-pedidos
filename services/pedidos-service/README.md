@@ -4,6 +4,8 @@ O primeiro fluxo recebe `negociacao_fechada` pelo Kafka, combina o resultado com
 
 A [especificação](../../docs/pedidos/requisitos.md) descreve os marcos seguintes, incluindo confirmação de estoque, frete, conclusão comercial e entrega.
 
+A [validação de 12/11/2026](validacao/relatorio.md) registra os testes executados, as correções e a cobertura dos 23 critérios. O primeiro fluxo está implementado; estoque, frete e conclusão ainda são os próximos marcos.
+
 ## Rodar a demonstração
 
 Execute na pasta `services/pedidos-service`, com o Docker Desktop iniciado.
