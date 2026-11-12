@@ -1,0 +1,24 @@
+x-pedidos: &pedidos
+  build:
+    context: ${PEDIDOS_PROJECT_DIR:?Indique o caminho absoluto de pedidos}
+  environment:
+    DATABASE_URL: ${DATABASE_URL:?Informe a DSN de svc_pedidos}
+    KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-rp-0:9092,rp-1:9092,rp-2:9092}
+    KAFKA_GROUP_ID: ${KAFKA_GROUP_ID:-pedidos-service-v1}
+    JWKS_URL: ${JWKS_URL:?Informe a URL interna de JWKS}
+    JWT_ISSUER: ${JWT_ISSUER:-identity-service}
+    JWT_AUDIENCE: ${JWT_AUDIENCE:-b2b-platform}
+  networks: [portal-net]
+
+services:
+  app1-pedidos:
+    <<: *pedidos
+  app2-pedidos:
+    <<: *pedidos
+  pedidos-migrate:
+    build:
+      context: ${PEDIDOS_PROJECT_DIR:?Indique o caminho absoluto de pedidos}
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    environment:
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?Informe a DSN da role de migração}
+    networks: [portal-net]

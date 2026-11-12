@@ -1,0 +1,12 @@
+**
+!requirements.txt
+!requirements-test.txt
+!app/
+!app/**
+!tests/
+!tests/**
+!migracoes/
+!migracoes/**
+!alembic.ini
+!Dockerfile
+**/__pycache__

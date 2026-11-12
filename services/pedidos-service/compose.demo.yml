@@ -1,0 +1,120 @@
+name: pedidos-fluxo
+
+x-app: &app
+  build: .
+  environment:
+    DATABASE_URL: postgresql://svc_pedidos:pedidos_demo_app@db:5432/portal_b2b
+    KAFKA_BOOTSTRAP_SERVERS: broker:9092
+    KAFKA_GROUP_ID: pedidos-fluxo-demo
+    JWKS_URL: http://identity:8000/.well-known/jwks.json
+  depends_on:
+    migrar:
+      condition: service_completed_successfully
+    topicos:
+      condition: service_completed_successfully
+    identity:
+      condition: service_started
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: portal_b2b
+      POSTGRES_USER: demo_admin
+      POSTGRES_PASSWORD: pedidos_demo_admin
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./demo/init.sql:/docker-entrypoint-initdb.d/01-pedidos.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "demo_admin", "-d", "portal_b2b"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  broker:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.1.8
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=512M
+      - --kafka-addr=0.0.0.0:9092
+      - --advertise-kafka-addr=broker:9092
+      - --set
+      - redpanda.auto_create_topics_enabled=false
+    volumes:
+      - rpdata:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info", "-X", "brokers=broker:9092"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  topicos:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.1.8
+    entrypoint: ["sh", "-ec"]
+    command:
+      - |
+        for topic in produto_cadastrado produto_atualizado fornecimento_criado negociacao_fechada pedido_criado pedidos.dlt; do
+          rpk topic describe "$$topic" -X brokers=broker:9092 >/dev/null 2>&1 ||
+          rpk topic create "$$topic" -p 3 -r 1 -X brokers=broker:9092
+        done
+    depends_on:
+      broker:
+        condition: service_healthy
+
+  migrar:
+    build: .
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    environment:
+      MIGRATION_DATABASE_URL: postgresql://portal_ddl:pedidos_demo_ddl@db:5432/portal_b2b
+    depends_on:
+      db:
+        condition: service_healthy
+
+  identity:
+    build:
+      context: .
+      target: test
+    command: ["uvicorn", "tests.demo_identity:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  app1:
+    <<: *app
+
+  app2:
+    <<: *app
+
+  gateway:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./demo/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:${PEDIDOS_HTTP_PORT:-18107}:8080"
+    depends_on:
+      app1:
+        condition: service_started
+        restart: true
+      app2:
+        condition: service_started
+        restart: true
+
+  teste:
+    profiles: ["teste"]
+    build:
+      context: .
+      target: test
+    environment:
+      PEDIDOS_DEMO: "1"
+      PEDIDOS_API_URL: http://gateway:8080
+      PEDIDOS_IDENTITY_URL: http://identity:8000
+      DATABASE_URL: postgresql://svc_pedidos:pedidos_demo_app@db:5432/portal_b2b
+      KAFKA_BOOTSTRAP_SERVERS: broker:9092
+      KAFKA_GROUP_ID: pedidos-fluxo-demo
+    command: ["python", "-m", "pytest", "-q"]
+    depends_on:
+      - gateway
+
+volumes:
+  pgdata:
+  rpdata:
