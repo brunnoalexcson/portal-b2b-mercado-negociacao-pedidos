@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/contratos/negociacao/negociacao_fechada.schema.json",
+  "title": "negociacao_fechada",
+  "description": "Publicado pelo negociacao-service uma vez por negociação, em todo final (ENCERRADO, DESERTO, RECUSADO, EXPIRADO). O pedidos-service efetiva os pedidos temporários de alocacoes e cancela os demais da negociação (RF-06, RF-09, RF-10, RF-11). Chave: negociacaoId.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "eventType": {
+      "const": "negociacao_fechada"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "source": {
+      "const": "negociacao-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "negociacaoId",
+        "tipo",
+        "status",
+        "compradorId",
+        "produtoId",
+        "alocacoes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "negociacaoId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "tipo": {
+          "enum": [
+            "LEILAO",
+            "DIRETA"
+          ]
+        },
+        "status": {
+          "enum": [
+            "ENCERRADO",
+            "DESERTO",
+            "RECUSADO",
+            "EXPIRADO"
+          ]
+        },
+        "compradorId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "\\S"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "produtoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "alocacoes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "fornecimentoId",
+              "fornecedorId",
+              "pedidoId",
+              "quantidade",
+              "valorUnitario",
+              "valorTotal"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "fornecimentoId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "\\S"
+              },
+              "fornecedorId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "\\S"
+              },
+              "pedidoId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "\\S"
+              },
+              "quantidade": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Até 2 casas decimais; a precisão é validada pelo serviço."
+              },
+              "valorUnitario": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Reais (BRL), até 2 casas decimais; a precisão é validada pelo serviço."
+              },
+              "valorTotal": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Reais (BRL), até 2 casas decimais; a precisão é validada pelo serviço."
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "ENCERRADO"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "compradorId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "\\S"
+              },
+              "alocacoes": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "DESERTO",
+                  "RECUSADO",
+                  "EXPIRADO"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "alocacoes": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "DESERTO"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "tipo": {
+                "const": "LEILAO"
+              },
+              "compradorId": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "RECUSADO",
+                  "EXPIRADO"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "tipo": {
+                "const": "DIRETA"
+              },
+              "compradorId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "\\S"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

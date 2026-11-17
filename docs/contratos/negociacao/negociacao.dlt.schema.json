@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/contratos/negociacao/negociacao.dlt.schema.json",
+  "title": "negociacao.dlt",
+  "description": "Publicado pelo negociacao-service quando uma mensagem consumida é inválida ou continua falhando depois de 4 execuções (RF-17). Chave: aggregateId original, ou eventId original, ou \"desconhecido\".",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "eventType": {
+      "const": "negociacao.dlt"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "source": {
+      "const": "negociacao-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "topicoOrigem",
+        "originalEvent",
+        "error",
+        "detalhe",
+        "stackTrace",
+        "failedAtAttempt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "topicoOrigem": {
+          "enum": [
+            "pedido_atualizado",
+            "fornecimento_criado",
+            "fornecimento_atualizado",
+            "estoque_atualizado"
+          ]
+        },
+        "originalEvent": {},
+        "error": {
+          "enum": [
+            "EVENTO_INVALIDO",
+            "PROCESSAMENTO_FALHOU"
+          ]
+        },
+        "detalhe": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "stackTrace": {
+          "const": ""
+        },
+        "failedAtAttempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        }
+      }
+    }
+  }
+}

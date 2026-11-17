@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/contratos/negociacao/leilao_iniciado.schema.json",
+  "title": "leilao_iniciado",
+  "description": "Publicado pelo negociacao-service quando um fornecedor cria um leilão (RF-01). Chave: negociacaoId.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "eventType": {
+      "const": "leilao_iniciado"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "source": {
+      "const": "negociacao-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "negociacaoId",
+        "produtoId",
+        "status",
+        "dataInicio",
+        "dataFim",
+        "criadoPor",
+        "oferta"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "negociacaoId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "produtoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "status": {
+          "const": "AGUARDANDO_INICIO"
+        },
+        "dataInicio": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "dataFim": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        },
+        "criadoPor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "oferta": {
+          "type": "object",
+          "required": [
+            "fornecimentoId",
+            "fornecedorId",
+            "quantidade",
+            "precoUnitario"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "fornecimentoId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "\\S"
+            },
+            "fornecedorId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "\\S"
+            },
+            "quantidade": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Até 2 casas decimais; a precisão é validada pelo serviço."
+            },
+            "precoUnitario": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Reais (BRL), até 2 casas decimais; a precisão é validada pelo serviço."
+            }
+          }
+        }
+      }
+    }
+  }
+}

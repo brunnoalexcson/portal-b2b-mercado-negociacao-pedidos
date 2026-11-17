@@ -1,0 +1,34 @@
+{
+  "eventId": "37000000-0000-4000-8000-000000000004",
+  "eventType": "negociacao_fechada",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T15:00:00.000Z",
+  "source": "negociacao-service",
+  "correlationId": "teste-neg-01",
+  "aggregateId": "31000000-0000-4000-8000-000000000001",
+  "payload": {
+    "negociacaoId": "31000000-0000-4000-8000-000000000001",
+    "tipo": "LEILAO",
+    "status": "ENCERRADO",
+    "compradorId": "b2000000-0000-4000-8000-000000000002",
+    "produtoId": "35000000-0000-4000-8000-000000000001",
+    "alocacoes": [
+      {
+        "fornecimentoId": "34000000-0000-4000-8000-000000000001",
+        "fornecedorId": "a1000000-0000-4000-8000-000000000001",
+        "pedidoId": "32000000-0000-4000-8000-000000000001",
+        "quantidade": 5.00,
+        "valorUnitario": 130.00,
+        "valorTotal": 650.00
+      },
+      {
+        "fornecimentoId": "34000000-0000-4000-8000-000000000002",
+        "fornecedorId": "a1000000-0000-4000-8000-000000000002",
+        "pedidoId": "32000000-0000-4000-8000-000000000002",
+        "quantidade": 15.00,
+        "valorUnitario": 130.00,
+        "valorTotal": 1950.00
+      }
+    ]
+  }
+}

@@ -7,7 +7,7 @@ Projeto da disciplina de Sistemas Distribuídos. Este repositório reúne os ser
 | Serviço | Responsabilidade | Situação |
 | --- | --- | --- |
 | Mercado | Cruzar ofertas e demandas e encaminhar o resultado para Negociação. | Contribuição em preparação. Caminho previsto: `services/mercado-service/`. |
-| Negociação/Leilão | Conduzir a negociação e publicar o resultado com o vencedor. | Contribuição em preparação. Caminho previsto: `services/negociacao-service/`. |
+| [Negociação/Leilão](docs/negociacao/) | Conduzir leilões e negociações diretas e publicar o resultado para Pedidos. | Especificação ESP-NEG-001 em rascunho, antes do gate G1, e contratos de eventos prontos. Código previsto em `services/negociacao-service/`. |
 | [Pedidos](services/pedidos-service/) | Criar um pedido a partir do resultado da negociação e manter sua consulta e seu histórico. | Primeiro fluxo implementado e demonstrado localmente. |
 
 ## Fluxo de Pedidos
@@ -21,6 +21,13 @@ A demonstração roda com FastAPI, PostgreSQL 16, Redpanda, Nginx e duas réplic
 ```text
 .
 ├── docs/
+│   ├── contratos/
+│   │   └── negociacao/
+│   ├── especificacoes/
+│   │   └── ESP-NEG-001_Negociacao.md
+│   ├── negociacao/
+│   │   ├── README.md
+│   │   └── adr/
 │   └── pedidos/
 │       ├── requisitos.md
 │       └── historico/
@@ -51,5 +58,7 @@ O teste publica uma negociação fechada, verifica a reentrega sem duplicação 
 ## Documentação
 
 - [Especificação de Pedidos (ESP-PED-001)](docs/pedidos/requisitos.md)
+- [Negociação e Leilão: visão geral e propostas para Mercado e Pedidos](docs/negociacao/README.md)
+- [Especificação de Negociação e Leilão (ESP-NEG-001)](docs/especificacoes/ESP-NEG-001_Negociacao.md) e [contratos de eventos](docs/contratos/negociacao/)
 - [Plano de implementação e integração inicial](docs/pedidos/historico/plano-de-implementacao.md)
 - [Rascunho VIES original](docs/pedidos/historico/requisitos-vies.md) e [requisitos iniciais em PDF](docs/pedidos/historico/requisitos-pedidos.pdf)
