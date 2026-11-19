@@ -1,0 +1,25 @@
+{
+  "eventId": "38000000-0000-4000-8000-000000000004",
+  "eventType": "mercado.dlt",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T12:00:00.000Z",
+  "source": "mercado-service",
+  "correlationId": "teste-mrc-dem",
+  "aggregateId": "36000000-0000-4000-8000-000000000001",
+  "payload": {
+    "topicoOrigem": "demanda_criada",
+    "originalEvent": {
+      "eventId": "37000000-0000-4000-8000-000000000099",
+      "eventType": "demanda_criada",
+      "eventVersion": "1.0",
+      "timestamp": "2026-11-20T11:59:00.000Z",
+      "source": "demanda-service",
+      "correlationId": "teste-mrc-dem",
+      "aggregateId": "36000000-0000-4000-8000-000000000001"
+    },
+    "error": "EVENTO_INVALIDO",
+    "detalhe": "Campo obrigatório ausente: payload.",
+    "stackTrace": "",
+    "failedAtAttempt": 1
+  }
+}

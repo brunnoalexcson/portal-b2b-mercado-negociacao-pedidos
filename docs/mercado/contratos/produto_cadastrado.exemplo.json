@@ -1,0 +1,22 @@
+{
+  "eventId": "37000000-0000-4000-8000-000000000001",
+  "eventType": "produto_cadastrado",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T11:00:00.000Z",
+  "source": "produtos-service",
+  "correlationId": "teste-mrc-prod",
+  "aggregateId": "35000000-0000-4000-8000-000000000001",
+  "payload": {
+    "produtoId": "35000000-0000-4000-8000-000000000001",
+    "nome": "Milho em grão",
+    "categoria": "GRAOS",
+    "unidade": "TON",
+    "tipoTransporte": "GRANEL",
+    "pesoUnitarioKg": null,
+    "cadastradoPor": {
+      "empresaId": "30000000-0000-4000-8000-000000000002",
+      "usuarioId": "usr-7"
+    },
+    "cadastradoEm": "2026-11-20T11:00:00.000Z"
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/mercado/contratos/negociacao_fechada.schema.json",
+  "title": "negociacao_fechada",
+  "description": "Consumido pelo mercado-service (RF-11) para atualizar o saldo da demanda e encerrar a negociação. Formato da ESP-NEG-001 com o campo opcional demandaId, proposto pelo Mercado (INT-MRC-01). Chave: negociacaoId.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "eventType": {
+      "const": "negociacao_fechada"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "const": "negociacao-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "negociacaoId",
+        "status",
+        "alocacoes"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "negociacaoId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "enum": [
+            "ENCERRADO",
+            "DESERTO",
+            "RECUSADO",
+            "EXPIRADO"
+          ]
+        },
+        "compradorId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "demandaId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "alocacoes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "fornecimentoId",
+              "quantidade"
+            ],
+            "additionalProperties": true,
+            "properties": {
+              "fornecimentoId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "quantidade": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

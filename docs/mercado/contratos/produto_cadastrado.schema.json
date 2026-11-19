@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/mercado/contratos/produto_cadastrado.schema.json",
+  "title": "produto_cadastrado",
+  "description": "Consumido pelo mercado-service para a cópia local do produto (RF-02). Lista só os campos usados; os demais campos do contrato de Produtos são aceitos e ignorados. Chave: produtoId.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "eventType": {
+      "const": "produto_cadastrado"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "const": "produtos-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "produtoId",
+        "nome",
+        "unidade",
+        "cadastradoEm"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "produtoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "nome": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "unidade": {
+          "enum": [
+            "KG",
+            "TON",
+            "UN",
+            "CX",
+            "L"
+          ]
+        },
+        "cadastradoEm": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

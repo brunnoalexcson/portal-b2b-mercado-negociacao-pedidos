@@ -1,0 +1,45 @@
+{
+  "eventId": "38000000-0000-4000-8000-000000000002",
+  "eventType": "modo_negociacao_definido",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T12:10:00.000Z",
+  "source": "mercado-service",
+  "correlationId": "teste-mrc-10",
+  "aggregateId": "31000000-0000-4000-8000-000000000002",
+  "payload": {
+    "negociacaoId": "31000000-0000-4000-8000-000000000002",
+    "modo": "LEILAO_DIRETO",
+    "produtoId": "35000000-0000-4000-8000-000000000001",
+    "unidade": "TON",
+    "quantidadeTotal": 100.00,
+    "valorReferencia": 780.00,
+    "demandas": [],
+    "ofertas": [
+      {
+        "fornecimentoId": "34000000-0000-4000-8000-000000000001",
+        "fornecedorId": "30000000-0000-4000-8000-000000000002",
+        "quantidade": 60.00,
+        "precoUnitario": 8.00,
+        "valorItem": 480.00,
+        "participacao": 0.6154,
+        "origem": {
+          "cidade": "Rio Verde",
+          "uf": "GO"
+        }
+      },
+      {
+        "fornecimentoId": "34000000-0000-4000-8000-000000000002",
+        "fornecedorId": "30000000-0000-4000-8000-000000000003",
+        "quantidade": 40.00,
+        "precoUnitario": 7.50,
+        "valorItem": 300.00,
+        "participacao": 0.3846,
+        "origem": {
+          "cidade": "Jataí",
+          "uf": "GO"
+        }
+      }
+    ],
+    "definidaEm": "2026-11-20T12:10:00.000Z"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "eventId": "37000000-0000-4000-8000-000000000005",
+  "eventType": "estoque_atualizado",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T12:20:00.000Z",
+  "source": "fornecimentos-service",
+  "correlationId": "teste-mrc-02",
+  "aggregateId": "34000000-0000-4000-8000-000000000001",
+  "payload": {
+    "fornecimentoId": "34000000-0000-4000-8000-000000000001",
+    "produtoId": "35000000-0000-4000-8000-000000000001",
+    "fornecedorId": "30000000-0000-4000-8000-000000000002",
+    "operacao": "RESERVA",
+    "quantidadeMovimentada": 30.00,
+    "quantidadeDisponivel": 30.00,
+    "quantidadeReservada": 30.00,
+    "pedidoId": "32000000-0000-4000-8000-000000000001",
+    "atualizadoEm": "2026-11-20T12:20:00.000Z"
+  }
+}
