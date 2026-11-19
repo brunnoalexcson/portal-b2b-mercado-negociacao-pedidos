@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/contratos/negociacao/leilao_iniciado.schema.json",
+  "title": "leilao_iniciado",
+  "description": "Consumido pelo negociacao-service (RF-01): o mercado-service publica quando fecha o lote de uma sugestão de leilão (ESP-MRC-001 RF-10). Abre o leilão com o mesmo negociacaoId. Lista só os campos usados; os demais (sugestaoId, unidade, origem) são aceitos e ignorados. encerraEm > iniciaEm e fornecimentoId sem repetição são validados pelo serviço. Chave: negociacaoId.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "eventType": {
+      "const": "leilao_iniciado"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "const": "mercado-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "negociacaoId",
+        "produtoId",
+        "quantidadeTotal",
+        "precoInicial",
+        "incrementoMinimo",
+        "itens",
+        "iniciaEm",
+        "encerraEm"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "negociacaoId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "produtoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "quantidadeTotal": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Até 2 casas decimais; a precisão é validada pelo serviço."
+        },
+        "precoInicial": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Reais (BRL), até 2 casas decimais; a precisão é validada pelo serviço."
+        },
+        "incrementoMinimo": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Reais (BRL), até 2 casas decimais; a precisão é validada pelo serviço."
+        },
+        "itens": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "fornecimentoId",
+              "fornecedorId",
+              "quantidade",
+              "precoUnitario",
+              "valorItem",
+              "participacao"
+            ],
+            "additionalProperties": true,
+            "properties": {
+              "fornecimentoId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "\\S"
+              },
+              "fornecedorId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "\\S"
+              },
+              "quantidade": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Até 2 casas decimais; a precisão é validada pelo serviço."
+              },
+              "precoUnitario": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Reais (BRL), até 2 casas decimais; a precisão é validada pelo serviço."
+              },
+              "valorItem": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Reais (BRL), até 2 casas decimais; a precisão é validada pelo serviço."
+              },
+              "participacao": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "description": "Até 4 casas decimais; a precisão é validada pelo serviço."
+              }
+            }
+          }
+        },
+        "iniciaEm": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "encerraEm": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

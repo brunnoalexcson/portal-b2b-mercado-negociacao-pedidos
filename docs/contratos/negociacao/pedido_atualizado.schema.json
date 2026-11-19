@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/contratos/negociacao/pedido_atualizado.schema.json",
+  "title": "pedido_atualizado",
+  "description": "Consumido pelo negociacao-service (RF-03, RF-04) para saber o resultado da reserva do pedido temporário. Formato da ESP-PED-001 v2.1 §7.4; só CONFIRMADA e RECUSADA em reservaSituacao mudam algo (RN-04). Campos adicionais do produtor são aceitos e ignorados. Chave: pedidoId.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "eventType": {
+      "const": "pedido_atualizado"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "const": "pedidos-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "pedidoId",
+        "negociacaoId",
+        "fornecimentoId",
+        "status",
+        "reservaSituacao"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "pedidoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "negociacaoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "fornecimentoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reservaSituacao": {
+          "enum": [
+            "PENDENTE",
+            "CONFIRMADA",
+            "RECUSADA",
+            "ENCERRADA"
+          ]
+        }
+      }
+    }
+  }
+}
