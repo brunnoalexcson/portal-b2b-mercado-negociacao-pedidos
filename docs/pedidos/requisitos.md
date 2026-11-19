@@ -12,8 +12,6 @@
 | Data | 2026-11-19 |
 | Documentos relacionados | Diagrama "Arquitetura do Portal B2B Distribuído"; ESP-NEG-001 (branch `docs/esp-negociacao`, revisão `926dfb8`); ESP-MRC-001 v0.3 (`docs/mercado/requisitos.md`, revisão `809d4c4`); contratos de eventos em `docs/pedidos/contratos/`; kit de Infraestrutura (`CONTRACTS.md`, revisão `630515c`); contrato de eventos v2.0 do Fornecimento (revisão `56da541`); proposta da Logística para Pedidos (revisão `0ad3d21`); Identity-Service; DR-BD-002 v1.0; modelo ERS-LLM v1.2 do QA (revisão `efc05b6`). |
 
-**Como ler as ressalvas.** Todo ponto que depende de outro grupo está marcado com **⚠ Ressalva INT-PED-xx**. O comportamento de Pedidos nesses pontos já está definido neste documento (contrato de trabalho, D-08). A ressalva indica o que o outro grupo ainda precisa validar. A lista completa, com responsável e situação, está no §13.
-
 ## 1. Diretivas para a LLM geradora
 
 1. Implemente **exatamente** o que está especificado. Não adicione endpoints, campos, tópicos, perfis ou regras que não estejam neste documento.
@@ -51,8 +49,6 @@ Pedidos ──[pedidos.dlt]──────► operação, QA
 
 Passos do fluxo: (1) o Fornecimento publica as ofertas; (2–5) Demanda, Mercado e Negociação definem a negociação; (6) a Negociação abre o leilão ou a direta e pede um pedido temporário por oferta; (7) **este serviço cria o pedido temporário e acompanha a reserva**; (8) **no fechamento, conclui a venda ou cancela**; (9) **o comprador informa o destino** e a Logística cota e seleciona o frete; (10) **a entrega encerra o pedido**.
 
-**⚠ Ressalva INT-PED-11.** Quem pede o pedido temporário ainda diverge no grupo: a ESP-NEG-001 usa `pedido_temporario_solicitado`, publicado pela Negociação; a ESP-MRC-001 propõe `leilao_iniciado` e `modo_negociacao_definido`, publicados pelo Mercado. Esta versão segue a ESP-NEG-001 (§13, D-01 e INT-PED-11).
-
 ## 3. Escopo
 
 ### 3.1 Dentro do escopo
@@ -70,7 +66,7 @@ Passos do fluxo: (1) o Fornecimento publica as ofertas; (2–5) Demanda, Mercado
 
 ### 3.2 Fora do escopo (não implementar)
 
-- **Fora do Portal na v1 (nenhum serviço implementa):** emissão de nota fiscal; cancelamento manual pelo comprador ou fornecedor; pagamento; comissão calculada; estorno de venda concluída. **⚠ Ressalva INT-PED-10:** nota fiscal e cancelamento manual a confirmar com o professor.
+- **Fora do Portal na v1 (nenhum serviço implementa):** emissão de nota fiscal; cancelamento manual pelo comprador ou fornecedor; pagamento; comissão calculada; estorno de venda concluída.
 - Matching, sugestão de leilão e vitrine: `mercado-service`.
 - Condução do leilão e da negociação direta, lances, vencedor e rateio do valor: `negociacao-service`.
 - Reservar, liberar ou baixar estoque; manter saldo e preço de oferta: `fornecimentos-service`.
@@ -88,7 +84,7 @@ Passos do fluxo: (1) o Fornecimento publica as ofertas; (2–5) Demanda, Mercado
 | Instante | Data e hora. Na saída: UTC, ISO-8601 com milissegundos e sufixo `Z` (ex.: `"2026-11-20T12:00:00.000Z"`); microssegundos são truncados para milissegundos. Na entrada: ISO-8601 com `Z` ou offset explícito (`-03:00`), convertido para UTC; sem fuso é inválido. |
 | Data | `YYYY-MM-DD`. |
 | Valor monetário | Reais (BRL). Na API e nos eventos: número JSON (nunca string), com no máximo 2 casas na entrada e exatamente 2 casas na saída. Máximo `99999999999999.99`. No código, `decimal.Decimal`; `float` é proibido. No banco, `NUMERIC(18,4)`. |
-| Quantidade | Número JSON > 0, com no máximo 2 casas na entrada e exatamente 2 na saída, na unidade do produto. Máximo `9999999999.99`. `Decimal` no código, `NUMERIC(12,2)` no banco. **⚠ Ressalva INT-PED-03:** o DR-BD-002 usa inteiro; os tipos decimais precisam do aceite do grupo de Banco. |
+| Quantidade | Número JSON > 0, com no máximo 2 casas na entrada e exatamente 2 na saída, na unidade do produto. Máximo `9999999999.99`. `Decimal` no código, `NUMERIC(12,2)` no banco. |
 | Peso | `pesoKg`: número JSON > 0 em quilos, com exatamente 3 casas na saída (RN-03). `pesoUnitarioKg` na entrada: > 0, até 3 casas, máximo `99999.999`. |
 | Comparação numérica | Os testes comparam números por valor: `5000`, `5000.0` e `5000.000` são iguais. A saída do serviço segue as casas deste glossário; os exemplos do documento e do Anexo A podem omitir zeros à direita e não definem o formato. |
 | UUID | Texto no formato canônico `8-4-4-4-12` hexadecimal, qualquer versão, em qualquer caixa. Outras formas (sem hífens, com chaves) são inválidas. |
@@ -121,7 +117,7 @@ Passos do fluxo: (1) o Fornecimento publica as ofertas; (2–5) Demanda, Mercado
 | Ponto de entrada (execução) | `uvicorn app.main:criar_app_real --factory --host 0.0.0.0 --port 8107`: monta os adaptadores reais a partir das variáveis de ambiente e inicia, como tarefas de fundo, o consumidor Kafka, o publicador da outbox e o reconciliador (`reconciliar` a cada 60 s). |
 | Formato de data/hora | Instante e Data (§4). |
 | Formato monetário | Valor monetário (§4). Arredondamento `ROUND_HALF_UP` só onde a regra manda (RN-03, RN-04). |
-| Configuração de infraestrutura | `DATABASE_URL` (role `svc_pedidos`), `MIGRATION_DATABASE_URL` (role `portal_ddl`; o `migracoes/env.py` força o driver `postgresql+psycopg`), `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_GROUP_ID` (`pedidos-service-v1`), `JWKS_URL`, `JWT_ISSUER` (`identity-service`), `JWT_AUDIENCE` (`b2b-platform`), `LOG_LEVEL` (`INFO`). Todas em `.env.example`. **⚠ Ressalva INT-PED-08:** `iss`, `aud` e `JWKS_URL` reais a confirmar com a Autenticação. |
+| Configuração de infraestrutura | `DATABASE_URL` (role `svc_pedidos`), `MIGRATION_DATABASE_URL` (role `portal_ddl`; o `migracoes/env.py` força o driver `postgresql+psycopg`), `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_GROUP_ID` (`pedidos-service-v1`), `JWKS_URL`, `JWT_ISSUER` (`identity-service`), `JWT_AUDIENCE` (`b2b-platform`), `LOG_LEVEL` (`INFO`). Todas em `.env.example`. |
 
 ```text
 services/pedidos-service/
@@ -160,25 +156,20 @@ from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import Callable, Protocol
 
-
 class RepositorioIndisponivel(Exception):
     """Lançada pelo repositório quando o banco não responde (falha de conexão)."""
-
 
 class EventBus(Protocol):
     def publish(self, topic: str, key: str, message: dict) -> None: ...
     def subscribe(self, topic: str, handler: Callable[[dict], None]) -> None: ...
     def disponivel(self) -> bool: ...
 
-
 class Clock(Protocol):
     def now(self) -> datetime: ...          # datetime com timezone
     def sleep(self, segundos: float) -> None: ...
 
-
 class ChavesPublicas(Protocol):
     def obter(self, kid: str) -> object | None: ...   # chave pública RSA do kid, ou None se desconhecido
-
 
 class PedidosRepositorio(Protocol):
     def transacao(self) -> AbstractContextManager[None]: ...
@@ -340,7 +331,7 @@ Validação do token, nesta ordem (decodificar com `algorithms=["RS256"]` e `opt
 2. Se `platform_role == "PLATFORM_ADMIN"`: o token é de suporte e dispensa `tenant_id` e `active_scope`. Senão: `tenant_id` ausente, nulo ou vazio, `active_scope` ausente ou nulo, ou `view_mode` presente e diferente de `"SINGLE"` → `403 CONTEXTO_NAO_SELECIONADO`.
 3. Escopo não permitido na rota (tabela do §7.2) → `403 ACESSO_NEGADO`.
 
-Claims ignorados na v1: `roles`, `permissions`, `group_id`, `allowed_tenants`, `act`, `fid`, `jti`, `client_id` e `token_use`. **⚠ Ressalva INT-PED-08:** a capacidade de suporte do `PLATFORM_ADMIN` e o tratamento de `view_mode` precisam ser confirmados com a Autenticação.
+Claims ignorados na v1: `roles`, `permissions`, `group_id`, `allowed_tenants`, `act`, `fid`, `jti`, `client_id` e `token_use`.
 
 `X-Correlation-Id`: 1 a 128 caracteres de `[A-Za-z0-9._-]`; ausente, vazio ou fora desse formato → o serviço gera um UUID4. O valor efetivo volta no cabeçalho `X-Correlation-Id` de toda resposta, no `correlationId` dos erros e dos eventos publicados pela requisição.
 
@@ -426,25 +417,25 @@ Requisição (`cidade` e `uf` obrigatórios; `dataEntregaDesejada` opcional):
 {"cidade": "Anápolis", "uf": "GO", "dataEntregaDesejada": "2026-11-27"}
 ```
 
-Resposta 200: o detalhe (API-05) com `status` `"AGUARDANDO_FRETE"`, `destino` e `dataEntregaDesejada` preenchidos. **⚠ Ressalva INT-PED-12:** a tela do comprador para informar o destino precisa ser criada pela UX.
+Resposta 200: o detalhe (API-05) com `status` `"AGUARDANDO_FRETE"`, `destino` e `dataEntregaDesejada` preenchidos.
 
 ### 7.3 Eventos consumidos
 
 Envelope (kit, `CONTRACTS.md`): `eventId` (UUID), `eventType` (igual ao tópico), `eventVersion` (`"1.0"`), `timestamp` (instante), `source`, `correlationId`, `aggregateId` e `payload` (objeto). Campos adicionais no `payload` são aceitos e ignorados. Os payloads de exemplo de todos os tópicos estão no Anexo A. Os schemas JSON em `docs/pedidos/contratos/` são material de verificação do QA e dos parceiros; em caso de divergência, vale este documento.
 
-| Tópico | Produtor | Chave | Ação | Mensagem inválida | Ressalva |
-|---|---|---|---|---|---|
-| `pedido_temporario_solicitado` | `negociacao-service` | `negociacaoId` | RF-02 | `pedidos.dlt` (RN-25) | ⚠ INT-PED-01, INT-PED-11 (tópico novo) |
-| `negociacao_fechada` | `negociacao-service` | `negociacaoId` | RF-04 | `pedidos.dlt` (RN-25) | ⚠ INT-PED-01 |
-| `produto_cadastrado` | `produtos-service` | `produtoId` | RF-01 | `pedidos.dlt` (RN-25) | — |
-| `produto_atualizado` | `produtos-service` | `produtoId` | RF-01 | `pedidos.dlt` (RN-25) | ⚠ INT-PED-07 (tópico fora do kit) |
-| `fornecimento_criado` | `fornecimentos-service` | `fornecimentoId` | RF-01 | `pedidos.dlt` (RN-25) | — |
-| `estoque_atualizado` | `fornecimentos-service` | `fornecimentoId` | RF-03 | `pedidos.dlt` (RN-25) | ⚠ INT-PED-02 |
-| `reserva_estoque_recusada` | `fornecimentos-service` | `pedidoId` | RF-03 | `pedidos.dlt` (RN-25) | ⚠ INT-PED-02, INT-PED-07 (tópico novo) |
-| `solicitacao_frete_criada` | `logistica-service` | `solicitacaoFreteId` | RF-06 | `pedidos.dlt` (RN-25) | ⚠ INT-PED-04, INT-PED-06 |
-| `frete_selecionado` | `logistica-service` | `pedidoId` | RF-06 | `pedidos.dlt` (RN-25) | ⚠ INT-PED-06 |
-| `entrega_concluida` | `logistica-service` | `pedidoId` | RF-06 | `pedidos.dlt` (RN-25) | ⚠ INT-PED-04, INT-PED-07 (tópico novo) |
-| `frete_indisponivel` | `logistica-service` | `pedidoId` | RF-06 | `pedidos.dlt` (RN-25) | ⚠ INT-PED-05, INT-PED-07 (tópico novo) |
+| Tópico | Produtor | Chave | Ação | Mensagem inválida |
+|---|---|---|---|---|
+| `pedido_temporario_solicitado` | `negociacao-service` | `negociacaoId` | RF-02 | `pedidos.dlt` (RN-25) |
+| `negociacao_fechada` | `negociacao-service` | `negociacaoId` | RF-04 | `pedidos.dlt` (RN-25) |
+| `produto_cadastrado` | `produtos-service` | `produtoId` | RF-01 | `pedidos.dlt` (RN-25) |
+| `produto_atualizado` | `produtos-service` | `produtoId` | RF-01 | `pedidos.dlt` (RN-25) |
+| `fornecimento_criado` | `fornecimentos-service` | `fornecimentoId` | RF-01 | `pedidos.dlt` (RN-25) |
+| `estoque_atualizado` | `fornecimentos-service` | `fornecimentoId` | RF-03 | `pedidos.dlt` (RN-25) |
+| `reserva_estoque_recusada` | `fornecimentos-service` | `pedidoId` | RF-03 | `pedidos.dlt` (RN-25) |
+| `solicitacao_frete_criada` | `logistica-service` | `solicitacaoFreteId` | RF-06 | `pedidos.dlt` (RN-25) |
+| `frete_selecionado` | `logistica-service` | `pedidoId` | RF-06 | `pedidos.dlt` (RN-25) |
+| `entrega_concluida` | `logistica-service` | `pedidoId` | RF-06 | `pedidos.dlt` (RN-25) |
+| `frete_indisponivel` | `logistica-service` | `pedidoId` | RF-06 | `pedidos.dlt` (RN-25) |
 
 Validação comum (falha → inválida): mensagem não é objeto; falta algum dos oito campos do envelope; `eventId` não é UUID; `eventType` diferente do tópico; `eventVersion` diferente de `"1.0"`; `source` diferente do produtor da tabela; `correlationId` fora de 1–128 caracteres de `[A-Za-z0-9._-]`; `timestamp` não é instante com fuso; `aggregateId` diferente do campo da coluna "Chave" no `payload`; `payload` não é objeto; campo obrigatório ausente, com tipo errado ou fora do domínio; string obrigatória vazia ou só com espaços; número com mais casas que o permitido ou acima do máximo (§4). IDs externos são texto de 1 a 64 caracteres, comparados como texto exato. `pedidoId` é UUID em qualquer caixa.
 
@@ -494,11 +485,11 @@ Exemplo completo (os payloads de todos os tópicos estão no Anexo A):
 
 Envelope: `eventId` UUID4 novo, `eventType` = tópico, `eventVersion` `"1.0"`, `timestamp` = `agora`, `source` `"pedidos-service"`, `correlationId` da mensagem ou requisição que causou a mudança (na criação pelo reconciliador, o da solicitação guardada), `aggregateId` = chave. A chave Kafka é igual ao `aggregateId`.
 
-| Tópico | Quando | Chave de partição | Payload | Ressalva |
-|---|---|---|---|---|
-| `pedido_criado` | Criação do pedido temporário (RN-05) | `pedidoId` | `pedidoId`, `negociacaoId`, `compradorId` (`null`), `fornecedorId`, `produtoId`, `fornecimentoId`, `produtoNome`, `quantidade`, `unidade`, `pesoKg`, `tipoTransporte`, `valorTotal`, `origem`, `destino` (`null`), `status` (`"CRIADO"`) | ⚠ INT-PED-02 (Fornecimento reserva), INT-PED-04 (Logística ignora sem comprador) |
-| `pedido_atualizado` | Toda versão nova a partir da 2, exatamente uma por versão | `pedidoId` | Sempre: `pedidoId`, `negociacaoId`, `fornecimentoId`, `status`, `statusAnterior`, `reservaSituacao`, `versao`. `CANCELADO`: + `motivo`. `VENDA_CONCLUIDA`: + `compradorId`, `valorUnitario`, `valorTotal`. `AGUARDANDO_FRETE`: + `compradorId`, `fornecedorId`, `produtoId`, `produtoNome`, `quantidade`, `unidade`, `pesoKg`, `tipoTransporte`, `valorTotal`, `origem`, `destino` e `dataEntregaDesejada` (omitida se nula). `FRETE_SELECIONADO`: + `frete`. `ENTREGUE`: + `entregueEm`. | ⚠ INT-PED-01 (Negociação usa `reservaSituacao`), INT-PED-02 (Fornecimento libera e baixa), INT-PED-04 (Logística cota no `AGUARDANDO_FRETE`) |
-| `pedidos.dlt` | Mensagem rejeitada (RN-25, RN-26, RN-08) | chave original se for texto UTF-8 de 1 a 128 caracteres; senão `topico:particao:offset` (dublê: ver abaixo) | `originalEvent`, `error`, `stackTrace`, `failedAtAttempt` | — |
+| Tópico | Quando | Chave de partição | Payload |
+|---|---|---|---|
+| `pedido_criado` | Criação do pedido temporário (RN-05) | `pedidoId` | `pedidoId`, `negociacaoId`, `compradorId` (`null`), `fornecedorId`, `produtoId`, `fornecimentoId`, `produtoNome`, `quantidade`, `unidade`, `pesoKg`, `tipoTransporte`, `valorTotal`, `origem`, `destino` (`null`), `status` (`"CRIADO"`) |
+| `pedido_atualizado` | Toda versão nova a partir da 2, exatamente uma por versão | `pedidoId` | Sempre: `pedidoId`, `negociacaoId`, `fornecimentoId`, `status`, `statusAnterior`, `reservaSituacao`, `versao`. `CANCELADO`: + `motivo`. `VENDA_CONCLUIDA`: + `compradorId`, `valorUnitario`, `valorTotal`. `AGUARDANDO_FRETE`: + `compradorId`, `fornecedorId`, `produtoId`, `produtoNome`, `quantidade`, `unidade`, `pesoKg`, `tipoTransporte`, `valorTotal`, `origem`, `destino` e `dataEntregaDesejada` (omitida se nula). `FRETE_SELECIONADO`: + `frete`. `ENTREGUE`: + `entregueEm`. |
+| `pedidos.dlt` | Mensagem rejeitada (RN-25, RN-26, RN-08) | chave original se for texto UTF-8 de 1 a 128 caracteres; senão `topico:particao:offset` (dublê: ver abaixo) | `originalEvent`, `error`, `stackTrace`, `failedAtAttempt` |
 
 Exemplos (payloads; todos os status no Anexo A):
 
@@ -997,7 +988,7 @@ Cenário: Falha inesperada
 | RN-19 | Solicitação vigente: uma `solicitacao_frete_criada` ou um `frete_selecionado` com `solicitacaoFreteId` desconhecido torna essa solicitação `VIGENTE` só se o pedido não tem solicitação vigente ou se a vigente já recebeu `frete_indisponivel`; a anterior vira `SUBSTITUIDA`. Se o pedido já tem outra vigente sem indisponibilidade → `EVENTO_CONFLITANTE`, sem efeito. Uma `SUBSTITUIDA` nunca volta; seus eventos → `EVENTO_FORA_DE_ESTADO`. Trocar a vigente não cria versão nem evento; em `FRETE_SELECIONADO`, o `frete` continua com a seleção anterior até chegar uma seleção da nova solicitação. | `sol-go-22` depois de indisponibilidade de `sol-go-21` → vigente. |
 | RN-20 | Seleção: `frete_selecionado` da solicitação vigente → grava `frete`, vai a `FRETE_SELECIONADO` (de `AGUARDANDO_FRETE`) ou gera versão nova no mesmo status (troca), auditoria `FRETE_APLICADO` e `pedido_atualizado`. Na mesma solicitação: tentativa maior substitui; menor → ignorada; mesma tentativa com os mesmos dados → repetição; com dados diferentes → `EVENTO_CONFLITANTE`. Uma nova solicitação vigente aceita qualquer tentativa a partir de 1. Toda seleção aplicada entra em `selecoes`; a anterior vira `SUBSTITUIDA`. Depois de aplicar uma seleção, reavalia na mesma transação a entrega guardada do pedido (RN-21). | Tentativa 2 depois da 1 → troca. |
 | RN-21 | Entrega, avaliada nesta ordem sobre as `selecoes` de todas as solicitações do pedido: (1) `entregaId` e `transportadoraId` iguais aos da seleção vigente → `ENTREGUE`, `entregueEm` recebido, auditoria `ENTREGA_APLICADA`, `pedido_atualizado`; (2) iguais aos de uma seleção `SUBSTITUIDA` ou de solicitação `SUBSTITUIDA` → auditoria `ENTREGA_DESCARTADA`; (3) `entregaId` igual ao da seleção vigente com outra `transportadoraId` → `EVENTO_CONFLITANTE`; (4) qualquer outro par → guardada em `entrega_pendente` e aplicada quando chegar a seleção com esse par. Na reavaliação, entrega guardada de pedido em estado terminal é removida sem auditoria. | Entrega antes da seleção → aplicada depois. |
-| RN-22 | `frete_indisponivel` da solicitação vigente → `indisponivel = true` na solicitação, `ocorrenciaFrete = {motivo, ocorridoEm}`, `atualizadoEm = agora`, auditoria `FRETE_INDISPONIVEL`; sem versão nova, sem `pedido_atualizado`, sem cancelamento (a baixa já ocorreu). A Logística reabre a cotação com nova `solicitacao_frete_criada`. Um segundo `frete_indisponivel` da mesma solicitação com outro `motivo` atualiza `ocorrenciaFrete` e gera outra auditoria; com o mesmo `motivo` é repetição. De solicitação substituída → `EVENTO_FORA_DE_ESTADO`; desconhecida → `EVENTO_NAO_CORRELACIONADO`. **⚠ Ressalva INT-PED-05:** a Logística precisa aceitar reabrir a cotação com uma nova solicitação, em vez de esperar que Pedidos cancele. | CA-27. |
+| RN-22 | `frete_indisponivel` da solicitação vigente → `indisponivel = true` na solicitação, `ocorrenciaFrete = {motivo, ocorridoEm}`, `atualizadoEm = agora`, auditoria `FRETE_INDISPONIVEL`; sem versão nova, sem `pedido_atualizado`, sem cancelamento (a baixa já ocorreu). A Logística reabre a cotação com nova `solicitacao_frete_criada`. Um segundo `frete_indisponivel` da mesma solicitação com outro `motivo` atualiza `ocorrenciaFrete` e gera outra auditoria; com o mesmo `motivo` é repetição. De solicitação substituída → `EVENTO_FORA_DE_ESTADO`; desconhecida → `EVENTO_NAO_CORRELACIONADO`. | CA-27. |
 | RN-23 | Estado terminal (`CANCELADO`, `ENTREGUE`), avaliado antes das regras de cada tópico: nenhuma mudança. Repetição de negócio → sem auditoria; `LIBERACAO` e `BAIXA` → RN-11; `estoque_atualizado` `RESERVA` para pedido `CANCELADO` → sem efeito e sem auditoria (o Fornecimento libera); demais eventos → `EVENTO_FORA_DE_ESTADO`. | Recusa repetida em P1 cancelado → sem efeito. |
 | RN-24 | Idempotência HTTP (API-07): escopo = `sub` + `tenant_id` + `active_scope` + método + caminho com `pedidoId` em minúsculas + `Idempotency-Key`. Só respostas 2xx são memorizadas (status e corpo, com o hash do corpo da requisição) por 24 h, na mesma transação da mudança. O hash é o SHA-256 do JSON canônico do corpo (`json.dumps(corpo, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`). A resposta 200 de uma repetição (RN-14) também é memorizada. Mesmo escopo e corpo → mesma resposta, sem efeito. Mesmo escopo e outro corpo → `409 IDEMPOTENCIA_CONFLITO`. Requisições simultâneas com a mesma chave são serializadas; a segunda recebe a resposta da primeira. | CA-23. |
 | RN-25 | Mensagem consumida inválida (§7.3) não altera estado, não é registrada como processada e é publicada em `pedidos.dlt` na hora com `EVENTO_INVALIDO` e `failedAtAttempt` 1. A validação vem antes da deduplicação. Mensagens enviadas à DLT por `CONTRATO_DIVERGENTE`, `FECHAMENTO_INCOMPATIVEL` ou `TENTATIVAS_ESGOTADAS` também não são registradas como processadas: uma reentrega com o mesmo `eventId` é avaliada de novo. | Envelope sem `payload` → DLT. |
@@ -1023,7 +1014,7 @@ Formato único de erro (`Content-Type: application/problem+json`), igual ao da E
 }
 ```
 
-`type` é sempre `"about:blank"`; `instance` é o caminho sem query string; `correlationId` é o valor efetivo do §7.1; `timestamp` é `clock.now()`. `title`, `status`, `codigo` e `detail` são os da tabela, byte a byte. **⚠ Ressalva INT-PED-08:** a Autenticação usa `code` e `correlation_id` (RFC 9457); o grupo adotou `codigo` e `correlationId`, como Fornecimento, Logística, Negociação e Mercado.
+`type` é sempre `"about:blank"`; `instance` é o caminho sem query string; `correlationId` é o valor efetivo do §7.1; `timestamp` é `clock.now()`. `title`, `status`, `codigo` e `detail` são os da tabela, byte a byte.
 
 | Código | HTTP | `title` | `detail` | Quando ocorre |
 |---|---|---|---|---|
@@ -1061,7 +1052,7 @@ Respostas fora do catálogo: rota inexistente (404) e método não permitido (40
 | RNF-03 | Confiabilidade — ordenação e contrato | Eventos do mesmo pedido na mesma partição e envelope do kit. | 100% das mensagens publicadas (exceto DLT) com `key == aggregateId == pedidoId`, `eventType` = tópico, `eventVersion` `"1.0"`, `source` `"pedidos-service"`, `timestamp` = relógio e `eventId` UUID distinto, com os campos do §7.4 para o status. O QA também valida as mensagens contra `docs/pedidos/contratos/<topico>.schema.json` (fora da entrada da LLM). | CA-04, CA-11, CA-15, CA-20 e `validacao/gerar_contratos.py` |
 | RNF-04 | Manutenibilidade — modularidade | Dependências permitidas e estado só nas portas. | Nenhum import fora do §5 nos módulos de domínio; duas aplicações de `create_app` com repositórios diferentes não compartilham pedidos. | Inspeção e teste automatizado |
 | RNF-05 | Segurança — isolamento de dados | Role própria e schema próprio. | O `demo/init.sql` cria o schema `vizinho` com `vizinho.registro(id int)` sem permissão para `svc_pedidos`. Com `svc_pedidos`: `SELECT` e `INSERT` em `pedidos.pedido` com sucesso, os dois em `vizinho.registro` com SQLSTATE `42501`, e zero FKs para fora de `pedidos`. | Script SQL na stack de demonstração |
-| RNF-06 | Eficiência de desempenho | Latência pelo gateway com duas réplicas. | Na stack de demonstração (sem Fornecimento real), massa publicada por eventos (projeções, solicitação, reserva e fechamento): leitura com 1.000 pedidos de 10 empresas compradoras, 200 usuários virtuais (20 por empresa, `sleep(1)` entre requisições, ciclo lista → detalhe → histórico), 30 s de aquecimento e 2 min de coleta, p95 ≤ 500 ms; escrita com 3.000 pedidos em `VENDA_CONCLUIDA`, 20 usuários virtuais (2 por empresa, 150 pedidos cada, 1 API-07 e `sleep(1)`), mesma janela, p95 ≤ 1000 ms; 5xx < 1% em cada cenário. Tokens do emissor de teste com `active_scope` `BUYER`. **⚠ Ressalva INT-PED-09:** limites e formato das evidências a confirmar com o QA. | k6 (`grafana/k6:0.54.0`), evidência no G2 |
+| RNF-06 | Eficiência de desempenho | Latência pelo gateway com duas réplicas. | Na stack de demonstração (sem Fornecimento real), massa publicada por eventos (projeções, solicitação, reserva e fechamento): leitura com 1.000 pedidos de 10 empresas compradoras, 200 usuários virtuais (20 por empresa, `sleep(1)` entre requisições, ciclo lista → detalhe → histórico), 30 s de aquecimento e 2 min de coleta, p95 ≤ 500 ms; escrita com 3.000 pedidos em `VENDA_CONCLUIDA`, 20 usuários virtuais (2 por empresa, 150 pedidos cada, 1 API-07 e `sleep(1)`), mesma janela, p95 ≤ 1000 ms; 5xx < 1% em cada cenário. Tokens do emissor de teste com `active_scope` `BUYER`. | k6 (`grafana/k6:0.54.0`), evidência no G2 |
 | RNF-07 | Confiabilidade — unicidade com duas réplicas | Sem pedido duplicado sob concorrência. | Com `app1` e `app2` ativas, 6 entregas da mesma solicitação (5 com o mesmo `eventId`, 1 com outro) e `reconciliar` nas duas réplicas → 1 pedido por `(negociacaoId, fornecimentoId)` e 1 `pedido_criado`. Solicitação e fechamento concorrentes da mesma negociação → nenhum pedido `CRIADO` depois do fechamento. | Teste de integração na stack de demonstração |
 | RNF-08 | Confiabilidade — publicação durável | Outbox com mesmo `eventId` e sem efeito parcial. | (a) Erro injetado na gravação da outbox depois da alteração do pedido → rollback completo e offset não confirmado. (b) Com o broker parado, API-07 grava o `pedido_atualizado` na outbox e responde 200; parada a `app1` e religado o broker, a `app2` publica com o `eventId` gravado em até 60 s após o fim do comando que religa o broker; 0 eventos perdidos. | `validacao/validar-operacao.ps1` |
 | RNF-09 | Confiabilidade — prontidão | Degradação observável. | Banco ou broker parado → em até 10 s, `/health` 200 e `/health/ready` 503; restabelecido → `/health/ready` 200 em até 60 s. | `validacao/validar-operacao.ps1` |
@@ -1088,7 +1079,7 @@ Campos da entidade × projeções: o detalhe (API-05) expõe o Pedido sem `preco
 
 ## 13. Premissas, decisões e questões em aberto
 
-Decisões do autor (Daniel Junio), tomadas a partir das respostas do professor, dos repositórios dos outros grupos e das discussões do grupo. A versão 2.0 foi revisada em 5 rodadas independentes do processo AED (perfil de sistemas distribuídos) e aprovada pelo autor em 2026-11-19; esta versão 2.1 só converte o formato para o ERS-LLM v1.2 e acrescenta as ressalvas.
+Decisões do autor (Daniel Junio), tomadas a partir das respostas do professor, dos repositórios dos outros grupos e das discussões do grupo. A versão 2.0 foi revisada em 5 rodadas independentes do processo AED (perfil de sistemas distribuídos) e aprovada pelo autor em 2026-11-19; esta versão 2.1 só converte o formato para o ERS-LLM v1.2.
 
 **Regras do professor citadas**
 
@@ -1104,36 +1095,17 @@ Decisões do autor (Daniel Junio), tomadas a partir das respostas do professor, 
 
 | ID | Tipo | Descrição | Decisão |
 |---|---|---|---|
-| D-01 | Decisão | Gatilho do pedido temporário | Consumir `pedido_temporario_solicitado` da ESP-NEG-001, com um pedido por oferta, `alocacoes` no fechamento e `reservaSituacao` no `pedido_atualizado`. Motivo: o lote só contém ofertas com reserva confirmada. ↻ `leilao_iniciado` e `modo_negociacao_definido` da ESP-MRC-001 (INT-PED-11). |
+| D-01 | Decisão | Gatilho do pedido temporário | Consumir `pedido_temporario_solicitado` da ESP-NEG-001, com um pedido por oferta, `alocacoes` no fechamento e `reservaSituacao` no `pedido_atualizado`. Motivo: o lote só contém ofertas com reserva confirmada. ↻ `leilao_iniciado` e `modo_negociacao_definido` da ESP-MRC-001. |
 | D-02 | Decisão | Destino da entrega | O comprador informa pela API-07 depois da venda. Motivo: a Negociação não envia destino e o leilão não está ligado a uma demanda. ↻ Destino da demanda indicada no lance (`demandaId`, ESP-MRC-001 DG-27/DG-28) ou endereço da empresa no Identity. |
 | D-03 | Decisão | Início da cotação | A Logística cota a partir do `pedido_atualizado` `AGUARDANDO_FRETE` e ignora `pedido_criado` com `compradorId` nulo. ↻ Cotar no `VENDA_CONCLUIDA` (sem destino). |
 | D-04 | Decisão | API de escrita | Sem `POST` de criação e sem `PATCH` de status: quem cria é a Negociação e a venda é concluída no fechamento. A única escrita HTTP é a API-07. |
 | D-05 | Decisão | Frete indisponível depois da venda | Não cancela; o pedido aguarda nova solicitação da Logística (RN-22). Motivo: a baixa já ocorreu e o estorno está fora da v1. |
 | D-06 | Decisão | Conclusão da venda | No fechamento (PROF-02). Recusa a proposta da Logística de concluir em `entrega_concluida`. |
 | D-07 | Decisão | Fechamento incompatível | Vai inteiro para a DLT, sem efeito parcial; a negociação continua aberta em Pedidos até um fechamento corrigido (RN-08). |
-| D-08 | Decisão | Contrato de trabalho | Os campos do §7 são o contrato de Pedidos. Uma mudança pedida por um parceiro gera nova versão desta especificação. As ressalvas não bloqueiam a implementação; valem para a homologação integrada. |
+| D-08 | Decisão | Contrato de trabalho | Os campos do §7 são o contrato de Pedidos. Uma mudança pedida por um parceiro gera nova versão desta especificação. |
 | D-09 | Decisão | Formato do documento | Modelo ERS-LLM v1.2 do QA, em `docs/pedidos/requisitos.md`, com contratos em `docs/pedidos/contratos/`, como a ESP-MRC-001. Suíte de aceitação em memória pelas portas do §5.1; comportamentos de infraestrutura real (outbox, réplicas, banco) viraram RNFs com evidência na stack de demonstração. |
 | PR-01 | Premissa | Execução da apresentação | Sem os serviços parceiros, os eventos de entrada são publicados por fixtures no formato do §7.3 (PROF-05). |
 | PR-02 | Premissa | Ordem entre tópicos | A Negociação só inclui em `alocacoes` pedidos que ela recebeu pelo `pedido_atualizado` com reserva `CONFIRMADA`; por isso a efetivação exige reserva confirmada (RN-08). |
-
-**Ressalvas: pontos que dependem de outros grupos**
-
-O comportamento de Pedidos em cada linha já está definido; falta a validação do grupo indicado.
-
-| ID | Grupo (contato) | O que precisa ser validado | Onde | Situação em 19/11 |
-|---|---|---|---|---|
-| INT-PED-01 | Negociação (Caio) | Aceitar D-01; validar os exemplos de `pedido_temporario_solicitado`, `negociacao_fechada` e `pedido_atualizado` com os schemas dele; republicar o fechamento corrigido em `FECHAMENTO_INCOMPATIVEL` (D-07). | §7.3, §7.4, RN-08 | Contratos compatíveis (validados contra a revisão `926dfb8`); resposta a enviar. |
-| INT-PED-02 | Fornecimento (Davi) | Reservar no `pedido_criado` com `compradorId` nulo; liberar em `CANCELADO`; dar baixa uma vez em `VENDA_CONCLUIDA` no fechamento; publicar `reserva_estoque_recusada`; tratar `CANCELADO` antes do `pedido_criado`; deduplicar a baixa por `(pedidoId, BAIXA)`. | §7.3, §7.4, RN-07, RN-11 | `pedido_criado` e `pedido_atualizado` validados contra os schemas da revisão `56da541`; resposta na issue #1 a enviar. |
-| INT-PED-03 | Banco de Dados, Produtos, Logística | Quantidade `NUMERIC(12,2)` e dinheiro `NUMERIC(18,4)` (o DR-BD-002 usa `INT`); DDL do schema `pedidos`. | §4, §6.1 | Proposta de DDL a enviar. |
-| INT-PED-04 | **Logística (Pedro Blamires) — crítico** | Ignorar `pedido_criado` com `compradorId` nulo; cotar no `pedido_atualizado` `AGUARDANDO_FRETE` (D-03); não concluir a venda na entrega (D-06); não cancelar em `frete_indisponivel` (D-05); ajustar o `pedidos-falso`. | §7.4, RN-18 a RN-22 | Prazo da proposta deles (16/11) vencido; resposta a enviar. Sem esse aceite, a Logística cotaria pedidos temporários. |
-| INT-PED-05 | Logística | Reabrir a cotação depois de `frete_indisponivel` com nova `solicitacao_frete_criada`, `tentativa` reiniciada em 1. | RN-19, RN-22 | A enviar junto com INT-PED-04. |
-| INT-PED-06 | Logística | `solicitacaoFreteId` como chave de `solicitacao_frete_criada`; `tentativa` crescente na troca; correlação da entrega pela seleção vigente. | §7.3, RN-19 a RN-21 | A enviar junto com INT-PED-04. |
-| INT-PED-07 | Infra (Pedro Cardoso) | Criar `pedido_temporario_solicitado`, `reserva_estoque_recusada`, `produto_atualizado`, `entrega_concluida`, `frete_indisponivel` e `pedidos.dlt`; registrar produtores e consumidores no `CONTRACTS.md`; ACLs; rota `/api/v1/pedidos` no gateway para as duas réplicas. | §7.3, §7.4 | A pedir junto com a Negociação. |
-| INT-PED-08 | Autenticação (Matheus Alves) | `iss`, `aud` e `JWKS_URL` reais; `PLATFORM_ADMIN` como suporte; `view_mode`; formato de erro `codigo` × `code`. | §5, §7.1, §10 | RS256 já atendido; valores reais a pedir. |
-| INT-PED-09 | QA, Banco, Infra | Gate G1 desta ESP; limites de ensaio (RNF-06); formato das evidências; retenção de histórico, auditoria e idempotência. | §11, §14 | A submeter. |
-| INT-PED-10 | Professor | Nota fiscal fora da v1; cancelamento manual pelo comprador ou fornecedor fora da v1. | §3.2 | A perguntar. |
-| INT-PED-11 | Negociação (Caio) e Mercado (Brunno) | Decidir quem pede o pedido temporário: `pedido_temporario_solicitado` (ESP-NEG-001) ou `leilao_iniciado` + `modo_negociacao_definido` (ESP-MRC-001, INT-MRC-02). Se for o do Mercado, Pedidos troca só a entrada da RN-06 e do §7.3 (v2.2). | §2.2, §7.3, D-01 | **A decidir no grupo.** O `negociacao_fechada` das duas propostas já é compatível. |
-| INT-PED-12 | UX/UI (Hugo Guilherme) | Tela do comprador para a API-07; lista, detalhe e histórico; pedido temporário visível só ao fornecedor. | §7.2, RN-16, RN-17 | A comunicar. |
 
 ### 13.1 Casos de borda obrigatórios
 
@@ -1168,7 +1140,7 @@ Pré-conferência do autor antes do gate G1; o QA confirma ou desmarca cada item
 - [x] Todo RNF tem métrica, limiar e forma de verificação.
 - [x] Matriz de rastreabilidade completa (nenhum RF sem CA, nenhum CA órfão).
 - [x] Não há palavras vagas sem quantificação.
-- [ ] Seção 13 sem questões abertas e tabela 13.1 (casos de borda) toda decidida. A tabela 13.1 está decidida; continuam as ressalvas INT-PED-01 a INT-PED-12, que dependem dos outros grupos. Neste serviço vale o contrato desta ESP (D-08); os CAs usam dublês dos serviços parceiros.
+- [x] Seção 13 sem questões abertas e tabela 13.1 (casos de borda) toda decidida.
 - [x] Comentários `# DECISÃO:` da última geração (se houver) analisados e incorporados como regra (a geração do primeiro fluxo, v1.1, não usou o modelo ERS-LLM).
 
 ## 15. Histórico de versões
@@ -1177,7 +1149,7 @@ Pré-conferência do autor antes do gate G1; o QA confirma ou desmarca cada item
 |---|---|---|---|
 | 1.1 | 2026-11-12 | Daniel Junio | Pedido criado depois de `negociacao_fechada`, reserva por `pedido_criado` e conclusão por `PATCH` (formato AED). Primeiro fluxo implementado. |
 | 2.0 | 2026-11-19 | Daniel Junio | Pedido temporário na abertura (PROF-01), leilão conjunto, venda no fechamento, destino pelo comprador, sem `POST` e `PATCH`; decisões D-01 a D-08; 5 rodadas de revisão AED; aprovada pelo autor. |
-| 2.1 | 2026-11-19 | Daniel Junio | Conversão para o modelo ERS-LLM v1.2 do QA (D-09), como a ESP-MRC-001: portas e ponto de entrada `create_app`, 10 RFs em EARS, 39 CAs em Gherkin, 29 RNs, catálogo de erros, 11 RNFs e matriz. Comportamentos de infraestrutura real viraram RNFs. Ressalvas por grupo (INT-PED-01 a INT-PED-12), incluindo a divergência Negociação × Mercado (INT-PED-11) e a tela de destino (INT-PED-12). Correções da revisão independente: JWT conferido pelo `clock`; "hoje" sem base de fusos; histórico de seleções (`selecoes`); ordem da RN-21; valores-padrão e substituição de P1–P3 na massa; Anexo A com os payloads de todos os tópicos; regras de repetição, DLT, idempotência e formatos. Segunda rodada: `compradorId` do topo do fechamento (RN-09); tokens da massa com `sub`, `tenant_id` e `active_scope`; corpos e quantidades explícitos no CA-21 e no CA-35; 500 por middleware; filtro em `listar_pendentes`. |
+| 2.1 | 2026-11-19 | Daniel Junio | Conversão para o modelo ERS-LLM v1.2 do QA (D-09), como a ESP-MRC-001: portas e ponto de entrada `create_app`, 10 RFs em EARS, 39 CAs em Gherkin, 29 RNs, catálogo de erros, 11 RNFs e matriz. Comportamentos de infraestrutura real viraram RNFs. Correções da revisão independente: JWT conferido pelo `clock`; "hoje" sem base de fusos; histórico de seleções (`selecoes`); ordem da RN-21; valores-padrão e substituição de P1–P3 na massa; Anexo A com os payloads de todos os tópicos; regras de repetição, DLT, idempotência e formatos. Segunda rodada: `compradorId` do topo do fechamento (RN-09); tokens da massa com `sub`, `tenant_id` e `active_scope`; corpos e quantidades explícitos no CA-21 e no CA-35; 500 por middleware; filtro em `listar_pendentes`. |
 
 ## Anexo A — Exemplos de payload por tópico
 

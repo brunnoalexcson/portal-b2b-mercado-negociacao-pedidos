@@ -8,14 +8,14 @@ O serviço registra o pedido que bloqueia o estoque de uma oferta durante a nego
 
 | Item | Situação |
 |---|---|
-| Especificação (ESP-PED-001 v2.1) | No modelo **ERS-LLM v1.2 do QA**, como a ESP-MRC-001: 10 RFs, 39 critérios de aceitação em Gherkin, 29 regras, 11 RNFs. Conteúdo aprovado em 19/11 (v2.0, processo AED, 5 rodadas de revisão independente). Pronta para o gate G1. Pontos que dependem de outros grupos marcados com **⚠ Ressalva INT-PED-xx** (§13). |
+| Especificação (ESP-PED-001 v2.1) | No modelo **ERS-LLM v1.2 do QA**, como a ESP-MRC-001: 10 RFs, 39 critérios de aceitação em Gherkin, 29 regras, 11 RNFs. Conteúdo aprovado em 19/11 (v2.0, processo AED, 5 rodadas de revisão independente). Pronta para o gate G1. |
 | Contratos de eventos | Schemas JSON 2020-12 e exemplos validados para os 14 tópicos consumidos e publicados. Compatíveis com os contratos da Negociação (`926dfb8`), do Mercado (`809d4c4`) e do Fornecimento (`56da541`). |
 | Código (`services/pedidos-service/`) | Primeiro fluxo (v1.1) implementado e testado. Falta adaptar ao pedido temporário da v2.0. |
 | Alinhamento com Negociação e Mercado | **Divergência no gatilho do pedido temporário** (ver abaixo), a decidir no grupo. |
 
 ## Documentos
 
-- [Especificação ESP-PED-001](requisitos.md): modelo ERS-LLM v1.2, com portas, regras, API, eventos, critérios de aceitação, RNFs, decisões e ressalvas por grupo (§13).
+- [Especificação ESP-PED-001](requisitos.md): modelo ERS-LLM v1.2, com portas, regras, API, eventos, critérios de aceitação, RNFs, e decisões (§13).
 - [Contratos de eventos](contratos/): um `<topico>.schema.json` e um ou mais `<topico>[.variante].exemplo.json` por tópico.
 
 ## Como o serviço funciona
@@ -62,12 +62,12 @@ As especificações de Negociação e de Mercado propõem gatilhos diferentes pa
 
 | Grupo | Pendência |
 |---|---|
-| **Logística (crítico)** | Ignorar `pedido_criado` sem comprador, cotar no `AGUARDANDO_FRETE`, não concluir a venda na entrega, não cancelar em `frete_indisponivel` e reabrir a cotação (INT-PED-04 a 06). Sem isso, a Logística cotaria pedidos temporários. |
-| Negociação e Mercado | Decidir o gatilho do pedido temporário (INT-PED-11, acima). Aceite de INT-PED-01. |
-| Fornecimento | Resposta na issue #1 e deduplicação da baixa (INT-PED-02) |
-| Infra | Tópicos novos, consumidores no `CONTRACTS.md` e rota no gateway (INT-PED-07) |
-| Autenticação | `iss` e `aud` reais, `PLATFORM_ADMIN` e formato de erro (INT-PED-08) |
-| Banco de Dados | DDL do schema `pedidos` e quantidade decimal (INT-PED-03) |
-| UX/UI | Tela de destino do comprador (INT-PED-12) |
-| Professor | Nota fiscal e cancelamento manual fora da v1 (INT-PED-10) |
-| QA | Revisar a ESP no gate G1 (INT-PED-09) |
+| **Logística (crítico)** | Ignorar `pedido_criado` sem comprador, cotar no `AGUARDANDO_FRETE`, não concluir a venda na entrega, não cancelar em `frete_indisponivel` e reabrir a cotação. Sem isso, a Logística cotaria pedidos temporários. |
+| Negociação e Mercado | Decidir o gatilho do pedido temporário (seção acima) e validar os contratos de Negociação. |
+| Fornecimento | Resposta na issue #1 e deduplicação da baixa |
+| Infra | Tópicos novos, consumidores no `CONTRACTS.md` e rota no gateway |
+| Autenticação | `iss` e `aud` reais, `PLATFORM_ADMIN` e formato de erro |
+| Banco de Dados | DDL do schema `pedidos` e quantidade decimal |
+| UX/UI | Tela de destino do comprador |
+| Professor | Nota fiscal e cancelamento manual fora da v1 |
+| QA | Revisar a ESP no gate G1 |
