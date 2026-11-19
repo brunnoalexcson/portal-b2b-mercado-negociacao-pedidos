@@ -1,23 +1,40 @@
 {
-  "eventId": "37000000-0000-4000-8000-000000000001",
+  "eventId": "38000000-0000-4000-8000-000000000001",
   "eventType": "leilao_iniciado",
   "eventVersion": "1.0",
   "timestamp": "2026-11-20T12:00:00.000Z",
-  "source": "negociacao-service",
+  "source": "mercado-service",
   "correlationId": "teste-neg-01",
   "aggregateId": "31000000-0000-4000-8000-000000000001",
   "payload": {
     "negociacaoId": "31000000-0000-4000-8000-000000000001",
+    "sugestaoId": "39000000-0000-4000-8000-000000000001",
     "produtoId": "35000000-0000-4000-8000-000000000001",
-    "status": "AGUARDANDO_INICIO",
-    "dataInicio": "2026-11-20T13:00:00.000Z",
-    "dataFim": "2026-11-20T15:00:00.000Z",
-    "criadoPor": "a1000000-0000-4000-8000-000000000001",
-    "oferta": {
-      "fornecimentoId": "34000000-0000-4000-8000-000000000001",
-      "fornecedorId": "a1000000-0000-4000-8000-000000000001",
-      "quantidade": 5.00,
-      "precoUnitario": 120.00
-    }
+    "unidade": "TON",
+    "quantidadeTotal": 20.00,
+    "precoInicial": 2550.00,
+    "incrementoMinimo": 25.50,
+    "itens": [
+      {
+        "fornecimentoId": "34000000-0000-4000-8000-000000000001",
+        "fornecedorId": "a1000000-0000-4000-8000-000000000001",
+        "quantidade": 5.00,
+        "precoUnitario": 120.00,
+        "valorItem": 600.00,
+        "participacao": 0.2353,
+        "origem": {"cidade": "Rio Verde", "uf": "GO"}
+      },
+      {
+        "fornecimentoId": "34000000-0000-4000-8000-000000000002",
+        "fornecedorId": "a1000000-0000-4000-8000-000000000002",
+        "quantidade": 15.00,
+        "precoUnitario": 130.00,
+        "valorItem": 1950.00,
+        "participacao": 0.7647,
+        "origem": {"cidade": "Jataí", "uf": "GO"}
+      }
+    ],
+    "iniciaEm": "2026-11-20T12:00:00.000Z",
+    "encerraEm": "2026-11-20T15:00:00.000Z"
   }
 }

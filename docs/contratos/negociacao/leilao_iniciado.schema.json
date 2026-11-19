@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/contratos/negociacao/leilao_iniciado.schema.json",
   "title": "leilao_iniciado",
-  "description": "Publicado pelo negociacao-service quando um fornecedor cria um leilão (RF-01). Chave: negociacaoId.",
+  "description": "Consumido pelo negociacao-service (RF-01): o mercado-service publica quando fecha o lote de uma sugestão de leilão (ESP-MRC-001 RF-10). Abre o leilão com o mesmo negociacaoId. Lista só os campos usados; os demais (sugestaoId, unidade, origem) são aceitos e ignorados. encerraEm > iniciaEm e fornecimentoId sem repetição são validados pelo serviço. Chave: negociacaoId.",
   "type": "object",
   "required": [
     "eventId",
@@ -18,7 +18,7 @@
   "properties": {
     "eventId": {
       "type": "string",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      "minLength": 1
     },
     "eventType": {
       "const": "leilao_iniciado"
@@ -28,11 +28,10 @@
     },
     "timestamp": {
       "type": "string",
-      "format": "date-time",
-      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+      "format": "date-time"
     },
     "source": {
-      "const": "negociacao-service"
+      "const": "mercado-service"
     },
     "correlationId": {
       "type": "string",
@@ -50,13 +49,14 @@
       "required": [
         "negociacaoId",
         "produtoId",
-        "status",
-        "dataInicio",
-        "dataFim",
-        "criadoPor",
-        "oferta"
+        "quantidadeTotal",
+        "precoInicial",
+        "incrementoMinimo",
+        "itens",
+        "iniciaEm",
+        "encerraEm"
       ],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "negociacaoId": {
           "type": "string",
@@ -68,58 +68,79 @@
           "maxLength": 64,
           "pattern": "\\S"
         },
-        "status": {
-          "const": "AGUARDANDO_INICIO"
+        "quantidadeTotal": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Até 2 casas decimais; a precisão é validada pelo serviço."
         },
-        "dataInicio": {
-          "type": "string",
-          "format": "date-time",
-          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        "precoInicial": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Reais (BRL), até 2 casas decimais; a precisão é validada pelo serviço."
         },
-        "dataFim": {
-          "type": "string",
-          "format": "date-time",
-          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+        "incrementoMinimo": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Reais (BRL), até 2 casas decimais; a precisão é validada pelo serviço."
         },
-        "criadoPor": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 64,
-          "pattern": "\\S"
-        },
-        "oferta": {
-          "type": "object",
-          "required": [
-            "fornecimentoId",
-            "fornecedorId",
-            "quantidade",
-            "precoUnitario"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "fornecimentoId": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64,
-              "pattern": "\\S"
-            },
-            "fornecedorId": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 64,
-              "pattern": "\\S"
-            },
-            "quantidade": {
-              "type": "number",
-              "exclusiveMinimum": 0,
-              "description": "Até 2 casas decimais; a precisão é validada pelo serviço."
-            },
-            "precoUnitario": {
-              "type": "number",
-              "exclusiveMinimum": 0,
-              "description": "Reais (BRL), até 2 casas decimais; a precisão é validada pelo serviço."
+        "itens": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "fornecimentoId",
+              "fornecedorId",
+              "quantidade",
+              "precoUnitario",
+              "valorItem",
+              "participacao"
+            ],
+            "additionalProperties": true,
+            "properties": {
+              "fornecimentoId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "\\S"
+              },
+              "fornecedorId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": "\\S"
+              },
+              "quantidade": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Até 2 casas decimais; a precisão é validada pelo serviço."
+              },
+              "precoUnitario": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Reais (BRL), até 2 casas decimais; a precisão é validada pelo serviço."
+              },
+              "valorItem": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Reais (BRL), até 2 casas decimais; a precisão é validada pelo serviço."
+              },
+              "participacao": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "description": "Até 4 casas decimais; a precisão é validada pelo serviço."
+              }
             }
           }
+        },
+        "iniciaEm": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "encerraEm": {
+          "type": "string",
+          "format": "date-time"
         }
       }
     }

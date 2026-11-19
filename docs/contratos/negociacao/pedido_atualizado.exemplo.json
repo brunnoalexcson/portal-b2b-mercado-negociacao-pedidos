@@ -11,8 +11,8 @@
     "negociacaoId": "31000000-0000-4000-8000-000000000001",
     "fornecimentoId": "34000000-0000-4000-8000-000000000001",
     "status": "CRIADO",
-    "reservaSituacao": "CONFIRMADA",
     "statusAnterior": "CRIADO",
+    "reservaSituacao": "CONFIRMADA",
     "versao": 2
   }
 }

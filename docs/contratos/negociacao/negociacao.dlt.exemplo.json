@@ -5,17 +5,17 @@
   "timestamp": "2026-11-20T12:05:00.000Z",
   "source": "negociacao-service",
   "correlationId": "teste-neg-dlt",
-  "aggregateId": "34000000-0000-4000-8000-000000000001",
+  "aggregateId": "32000000-0000-4000-8000-000000000001",
   "payload": {
-    "topicoOrigem": "estoque_atualizado",
+    "topicoOrigem": "pedido_atualizado",
     "originalEvent": {
       "eventId": "38000000-0000-4000-8000-000000000009",
-      "eventType": "estoque_atualizado",
+      "eventType": "pedido_atualizado",
       "eventVersion": "1.0",
       "timestamp": "2026-11-20T12:04:59.000Z",
-      "source": "fornecimentos-service",
+      "source": "pedidos-service",
       "correlationId": "teste-neg-dlt",
-      "aggregateId": "34000000-0000-4000-8000-000000000001"
+      "aggregateId": "32000000-0000-4000-8000-000000000001"
     },
     "error": "EVENTO_INVALIDO",
     "detalhe": "payload ausente",
