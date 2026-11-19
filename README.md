@@ -6,7 +6,7 @@ Projeto da disciplina de Sistemas Distribuídos. Este repositório reúne os ser
 
 | Serviço | Responsabilidade | Situação |
 | --- | --- | --- |
-| Mercado | Cruzar ofertas e demandas e encaminhar o resultado para Negociação. | Contribuição em preparação. Caminho previsto: `services/mercado-service/`. |
+| [Mercado](docs/mercado/) | Calcular oferta × demanda por produto, mostrar a vitrine pelo menor preço, abrir a negociação direta e iniciar leilões em lote quando a demanda supera a oferta. | Especificação ESP-MRC-001 v0.5 no modelo ERS-LLM do QA, com contratos de eventos. Código previsto em `services/mercado-service/`. |
 | Negociação/Leilão | Conduzir a negociação e publicar o resultado com o vencedor. | Contribuição em preparação. Caminho previsto: `services/negociacao-service/`. |
 | [Pedidos](docs/pedidos/) | Criar o pedido temporário que reserva o estoque na abertura da negociação, efetivar ou cancelar no fechamento e acompanhar destino, frete e entrega. | Especificação ESP-PED-001 v2.1 no modelo ERS-LLM do QA, com contratos de eventos. Código do primeiro fluxo (v1.1) em `services/pedidos-service/`, a adaptar à v2.1. |
 
@@ -21,6 +21,10 @@ A demonstração do primeiro fluxo (v1.1) roda com FastAPI, PostgreSQL 16, Redpa
 ```text
 .
 ├── docs/
+│   ├── mercado/
+│   │   ├── README.md
+│   │   ├── requisitos.md
+│   │   └── contratos/
 │   └── pedidos/
 │       ├── README.md
 │       ├── requisitos.md
@@ -51,5 +55,7 @@ O teste publica uma negociação fechada, verifica a reentrega sem duplicação 
 
 ## Documentação
 
+- [Mercado: visão geral, fronteiras e pendências](docs/mercado/README.md)
+- [Especificação de Mercado (ESP-MRC-001 v0.5, ERS-LLM)](docs/mercado/requisitos.md) e [contratos de eventos](docs/mercado/contratos/)
 - [Pedidos: visão geral, fronteiras e pendências](docs/pedidos/README.md)
 - [Especificação de Pedidos (ESP-PED-001 v2.1, ERS-LLM)](docs/pedidos/requisitos.md) e [contratos de eventos](docs/pedidos/contratos/)

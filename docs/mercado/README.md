@@ -4,19 +4,20 @@ Responsável: Brunno Alexcson. Porta `8105`, rotas `/api/v1/mercado`, schema Pos
 
 O serviço acompanha, por produto, a oferta disponível e a demanda aberta do portal e decide como cada compra é negociada: negociação direta entre um comprador e a oferta que ele escolher, ou leilão em lote quando a demanda supera a oferta e os fornecedores aceitam a sugestão de leilão. É o bloco 5 do diagrama da arquitetura ("calcula oferta vs demanda, define modo de negociação, inicia leilões quando necessário").
 
-## Situação em 18/11/2026 (v0.4)
+## Situação em 19/11/2026 (v0.5)
 
 | Item | Situação |
 |---|---|
-| Especificação (ESP-MRC-001 v0.4) | Rascunho no modelo ERS-LLM v1.2 do QA, antes do gate G1; 17 RFs, 59 CAs, decisões DG-01 a DG-50 |
-| Contratos de eventos | Schemas JSON e exemplos validados para os 12 tópicos |
+| Especificação (ESP-MRC-001 v0.5) | Rascunho no modelo ERS-LLM v1.2 do QA, antes do gate G1; 17 RFs, 59 CAs, decisões DG-01 a DG-54 |
+| Contratos de eventos | Schemas JSON e exemplos validados para os 12 tópicos; conferidos contra os contratos do Pedidos e do Fornecimento |
 | Código (`services/mercado-service/`) | Não iniciado; segue a estrutura do `pedidos-service` |
-| Alinhamento com Negociação e Pedidos | Divergências na INT-MRC-01 e na INT-MRC-02, **a discutir no grupo** |
+| Alinhamento com Pedidos | Fechado em 19/11 (INT-MRC-02): a ESP-PED-001 não muda |
+| Alinhamento com Negociação | Proposta de 19/11 na INT-MRC-01, **a confirmar com o Caio** |
 | Status Report | Decisões marcadas com "Status Report: sim" na seção 13 da ESP |
 
 ## Documentos
 
-- [Especificação ESP-MRC-001](requisitos.md): regras, rotas, eventos, erros, critérios de aceitação e decisões DG-01 a DG-50, pendências de integração INT-MRC-01 a INT-MRC-09 e pontos fora desta versão (seção 13).
+- [Especificação ESP-MRC-001](requisitos.md): regras, rotas, eventos, erros, critérios de aceitação e decisões DG-01 a DG-54, pendências de integração INT-MRC-01 a INT-MRC-09 e pontos fora desta versão (seção 13).
 - [Contratos de eventos](contratos/): um `<topico>.schema.json` (JSON Schema 2020-12) e um `<topico>.exemplo.json` por tópico consumido e publicado.
 
 ## Como o serviço funciona
@@ -33,7 +34,8 @@ O serviço acompanha, por produto, a oferta disponível e a demanda aberta do po
 
 1. O comprador escolhe uma oferta na vitrine e pede a negociação com a quantidade que quer (`POST /api/v1/mercado/negociacoes`).
 2. O Mercado confere aptidão, preço máximo, saldo da demanda e disponível da oferta, e publica `modo_negociacao_definido`.
-3. Uma demanda pode ter várias negociações abertas com ofertas diferentes, até o seu saldo (atendimento parcial).
+3. A Negociação abre a direta com o mesmo `negociacaoId` e pede o pedido temporário ao Pedidos (`pedido_temporario_solicitado`).
+4. Uma demanda pode ter várias negociações abertas com ofertas diferentes, até o seu saldo (atendimento parcial).
 
 **Leilão (`LEILAO_DIRETO`)**
 
@@ -41,7 +43,8 @@ O serviço acompanha, por produto, a oferta disponível e a demanda aberta do po
 2. Cada fornecedor decide se entra no lote e com quanto; pode alterar ou sair até T1.
 3. O lote fecha (T1) no fim da janela de adesão, quando todos os fornecedores elegíveis entraram ou quando a oferta volta a cobrir a demanda.
 4. Em T1, o Mercado calcula o preço inicial (soma de quantidade × preço), o incremento mínimo e a participação de cada fornecedor no valor do lote, e publica `modo_negociacao_definido` e `leilao_iniciado`. T2 = T1 + duração configurada.
-5. Lances, vencedor e rateio do valor são da Negociação. O Mercado só recebe o `negociacao_fechada` para atualizar o saldo das demandas.
+5. A Negociação pede o pedido temporário de cada item e só libera os lances com todas as reservas confirmadas. Item com reserva recusada sai do lote antes do primeiro lance, e ela recalcula o preço inicial.
+6. Lances, vencedor e rateio do valor são da Negociação. O Mercado recebe o `negociacao_fechada` para atualizar o saldo das demandas; só o primeiro fechamento de cada negociação é aplicado.
 
 Fora do escopo: conduzir propostas e lances, criar pedidos, reservar estoque, compra conjunta, preço uniforme, notificações por e-mail ou push.
 
@@ -49,37 +52,45 @@ Fora do escopo: conduzir propostas e lances, criar pedidos, reservar estoque, co
 
 | Direção | Tópico | Com quem | Chave |
 |---|---|---|---|
-| Publica | `modo_negociacao_definido` | Negociação, Pedidos | `negociacaoId` |
-| Publica | `leilao_iniciado` | Negociação, Pedidos, front-end | `negociacaoId` |
+| Publica | `modo_negociacao_definido` | Negociação | `negociacaoId` |
+| Publica | `leilao_iniciado` | Negociação, front-end | `negociacaoId` |
 | Publica | `mercado.dlt` | operação, QA | chave original |
 | Consome | `produto_cadastrado`, `produto_atualizado` | Produtos | `produtoId` |
 | Consome | `fornecimento_criado`, `fornecimento_atualizado`, `estoque_atualizado` | Fornecimento | `fornecimentoId` |
 | Consome | `demanda_criada`, `demanda_recorrente_gerada`, `demanda_cancelada` | Compra e Demanda | `demandaId` |
 | Consome | `negociacao_fechada` | Negociação | `negociacaoId` |
 
-## O que muda para Negociação e Pedidos (a discutir no grupo)
+## Fluxo combinado com Negociação e Pedidos (19/11)
 
-Detalhes na seção 13 da ESP (INT-MRC-01 e INT-MRC-02).
+Segue o diagrama: o Mercado inicia os leilões e publica `modo_negociacao_definido` e `leilao_iniciado`; a Negociação fica com lances, regras e vencedor.
 
-**Negociação**
-- Consumir `modo_negociacao_definido` e `leilao_iniciado` do Mercado, em vez de criar leilão e direta por HTTP.
-- Datas do leilão definidas pelo sistema (janela de adesão e duração configuradas).
-- Rateio pela `participacao` no valor enviada pelo Mercado, e incremento mínimo enviado no `leilao_iniciado`.
-- `demandaId` opcional no lance e no `negociacao_fechada`, para o Mercado saber qual demanda o vencedor atendeu.
+| Etapa | Quem faz |
+|---|---|
+| Balanço, sugestão, vitrine e formação do lote (aceites e T1) | Mercado |
+| Abrir a direta ou o leilão com o `negociacaoId` do Mercado | Negociação |
+| Pedido temporário de cada oferta (`pedido_temporario_solicitado`) | Negociação pede; Pedidos cria e reserva |
+| Lances só com todas as reservas confirmadas; item recusado sai antes do primeiro lance | Negociação |
+| Vencedor, rateio e `negociacao_fechada` | Negociação |
+| Destino da entrega | O comprador informa no Pedidos depois da venda |
 
-**Pedidos** (o professor determinou que o pedido nasce na abertura)
-- Criar o pedido da direta a partir de `modo_negociacao_definido`, já com comprador e destino.
-- Criar um pedido temporário sem comprador por item do lote a partir de `leilao_iniciado`; o solicitante é o Mercado.
-- Efetivar (comprador e valor) ou cancelar com `negociacao_fechada`; um pedido por `negociacaoId` + `fornecimentoId`; a reserva antecipada (P-29) deixa de ser necessária.
+**Pedidos à Negociação** (INT-MRC-01)
+- Abrir a direta e o leilão consumindo `modo_negociacao_definido` e `leilao_iniciado`, em vez de criá-los por HTTP.
+- Esperar as reservas antes dos lances e recalcular o lote se um item sair.
+- Datas do leilão pelo sistema, rateio pela participação no valor e incremento mínimo enviados pelo Mercado.
+- `demandaId` opcional no lance e no `negociacao_fechada`.
+
+**Pedidos**: nada muda na ESP-PED-001; falta só atualizar a referência para a ESP-MRC-001 v0.5.
 
 ## Pendências com outros grupos
 
 | Grupo | Pendência |
 |---|---|
+| Negociação | Itens da INT-MRC-01 acima |
 | Infra | Criar `demanda_cancelada`, `produto_atualizado` e `fornecimento_atualizado`; registrar o Mercado como produtor e consumidor dos tópicos; retirar o Mercado dos consumidores de `lance_realizado`; rota do gateway |
 | Compra e Demanda | Ajustes pedidos em 17/11 (`precoMaximo`, `frequencia`, `ocorrenciaId` no cancelamento, edição); cancelar demandas de produto excluído |
 | Fornecimento | Registrar o Mercado como consumidor dos eventos de produto e oferta |
 | Banco de Dados | DDL do schema `mercado` e quantidade decimal |
 | Autenticação | Padrão de erro com `codigo` |
+| Pedidos | Atualizar a referência para a ESP-MRC-001 v0.5 |
 | UX/UI | Telas de vitrine, sugestão de leilão e contexto do leilão |
 | QA | Revisar a ESP no gate G1 |

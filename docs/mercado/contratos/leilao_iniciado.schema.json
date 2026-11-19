@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/mercado/contratos/leilao_iniciado.schema.json",
   "title": "leilao_iniciado",
-  "description": "Publicado pelo mercado-service em T1, quando o lote da sugestão é fechado (RF-10), logo depois do modo_negociacao_definido do mesmo leilão. Consumidores: negociacao-service, pedidos-service (pedido temporário sem comprador) e front-end. Chave: negociacaoId.",
+  "description": "Publicado pelo mercado-service em T1, quando o lote da sugestão é fechado (RF-10), logo depois do modo_negociacao_definido do mesmo leilão. Consumidores: negociacao-service, que pede o pedido temporário de cada item e só libera os lances com todas as reservas confirmadas (DG-51), e front-end. Chave: negociacaoId.",
   "type": "object",
   "required": [
     "eventId",

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/mercado/contratos/negociacao_fechada.schema.json",
   "title": "negociacao_fechada",
-  "description": "Consumido pelo mercado-service (RF-11) para atualizar o saldo da demanda e encerrar a negociação. Formato da ESP-NEG-001 com o campo opcional demandaId, proposto pelo Mercado (INT-MRC-01). Chave: negociacaoId.",
+  "description": "Consumido pelo mercado-service (RF-11) para encerrar a negociação e atualizar o saldo da demanda. Só o primeiro fechamento de cada negociacaoId é aplicado (RN-25, DG-53). Formato da ESP-NEG-001 e da ESP-PED-001, com o campo opcional demandaId proposto pelo Mercado (INT-MRC-01). Chave: negociacaoId.",
   "type": "object",
   "required": [
     "eventId",
@@ -48,7 +48,9 @@
       "type": "object",
       "required": [
         "negociacaoId",
+        "tipo",
         "status",
+        "produtoId",
         "alocacoes"
       ],
       "additionalProperties": true,
@@ -56,6 +58,17 @@
         "negociacaoId": {
           "type": "string",
           "format": "uuid"
+        },
+        "tipo": {
+          "enum": [
+            "LEILAO",
+            "VENDA_DIRETA"
+          ]
+        },
+        "produtoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
         },
         "status": {
           "enum": [

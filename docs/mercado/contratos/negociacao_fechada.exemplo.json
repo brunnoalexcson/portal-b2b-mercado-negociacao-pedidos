@@ -19,7 +19,7 @@
         "fornecedorId": "30000000-0000-4000-8000-000000000002",
         "pedidoId": "32000000-0000-4000-8000-000000000011",
         "quantidade": 60.00,
-        "valorUnitario": 9.00,
+        "valorUnitario": 9.23,
         "valorTotal": 553.86
       },
       {
@@ -27,7 +27,7 @@
         "fornecedorId": "30000000-0000-4000-8000-000000000003",
         "pedidoId": "32000000-0000-4000-8000-000000000012",
         "quantidade": 40.00,
-        "valorUnitario": 9.00,
+        "valorUnitario": 8.65,
         "valorTotal": 346.14
       }
     ]

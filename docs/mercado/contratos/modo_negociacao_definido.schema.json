@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/mercado/contratos/modo_negociacao_definido.schema.json",
   "title": "modo_negociacao_definido",
-  "description": "Publicado pelo mercado-service quando abre uma negociação direta (RF-08) ou fecha o lote de um leilão (RF-10). Consumidores: negociacao-service e pedidos-service (INT-MRC-01, INT-MRC-02). Chave: negociacaoId.",
+  "description": "Publicado pelo mercado-service quando abre uma negociação direta (RF-08) ou fecha o lote de um leilão (RF-10). Consumidor: negociacao-service, que abre a negociação com o mesmo negociacaoId e pede o pedido temporário de cada oferta com pedido_temporario_solicitado (DG-51, DG-52). Chave: negociacaoId.",
   "type": "object",
   "required": [
     "eventId",
