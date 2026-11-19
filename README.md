@@ -24,8 +24,7 @@ A demonstração do primeiro fluxo (v1.1) roda com FastAPI, PostgreSQL 16, Redpa
 │   └── pedidos/
 │       ├── README.md
 │       ├── requisitos.md
-│       ├── contratos/
-│       └── historico/
+│       └── contratos/
 └── services/
     └── pedidos-service/
         ├── app/
@@ -54,6 +53,3 @@ O teste publica uma negociação fechada, verifica a reentrega sem duplicação 
 
 - [Pedidos: visão geral, fronteiras e pendências](docs/pedidos/README.md)
 - [Especificação de Pedidos (ESP-PED-001 v2.1, ERS-LLM)](docs/pedidos/requisitos.md) e [contratos de eventos](docs/pedidos/contratos/)
-- [Especificação de Pedidos v2.0 no formato AED](docs/pedidos/historico/ESP-PED-001_v2.0_AED.md)
-- [Plano de implementação e integração inicial](docs/pedidos/historico/plano-de-implementacao.md)
-- [Rascunho VIES original](docs/pedidos/historico/requisitos-vies.md) e [requisitos iniciais em PDF](docs/pedidos/historico/requisitos-pedidos.pdf)

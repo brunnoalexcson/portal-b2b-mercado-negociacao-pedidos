@@ -16,7 +16,6 @@ O serviço registra o pedido que bloqueia o estoque de uma oferta durante a nego
 ## Documentos
 
 - [Especificação ESP-PED-001](requisitos.md): modelo ERS-LLM v1.2, com portas, regras, API, eventos, critérios de aceitação, RNFs, decisões e ressalvas por grupo (§13).
-- [Versão anterior no formato AED](historico/ESP-PED-001_v2.0_AED.md): v2.0 aprovada, com as 5 rodadas de revisão.
 - [Contratos de eventos](contratos/): um `<topico>.schema.json` e um ou mais `<topico>[.variante].exemplo.json` por tópico.
 
 ## Como o serviço funciona
