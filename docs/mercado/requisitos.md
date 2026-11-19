@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-MRC-001 |
-| Versão | 0.3 |
+| Versão | 0.4 |
 | Status | Rascunho |
 | Serviço / Bounded context | `mercado-service` (microsserviço 5 do Portal B2B Distribuído): Mercado / Matching Engine. Porta `8105`, rotas `/api/v1/mercado`, schema PostgreSQL `mercado`, role `svc_mercado` |
 | Autores (PO / Dev / QA) | PO e Dev: Brunno Alexcson (grupo Mercado, Negociação/Leilão e Pedidos). QA: Grupo de Teste e Qualidade (revisão no gate G1) |
@@ -59,7 +59,7 @@ Passos do fluxo principal: (1) o Fornecimento publica as ofertas; (2) o comprado
 - Formação do lote pela sugestão: aceite, alteração e saída de fornecedores até T1; separação local da quantidade aceita.
 - Fechamento do lote em T1 (fim da janela de adesão ou todos os fornecedores elegíveis no lote), cálculo do preço inicial, do incremento mínimo e da participação de cada item, e publicação de `modo_negociacao_definido` (`LEILAO_DIRETO`) e `leilao_iniciado`.
 - Consumo de `negociacao_fechada` para encerrar a negociação registrada e abater o saldo das demandas.
-- Expiração de demandas pelo `prazoDesejado`.
+- Retirada do balanço das demandas com `prazoDesejado` vencido, sem alterar a situação da demanda (a expiração é regra do Demanda).
 - Consultas de balanço, vitrine, demandas, sugestões e negociações, com paginação.
 - Autenticação por JWT do Identity-Service, erros RFC 7807, `X-Correlation-Id`, `Idempotency-Key`, `/health`, `/health/ready`, `/metrics`.
 - Persistência no schema `mercado`, outbox transacional, consumo idempotente (`processed_events`), DLT `mercado.dlt`, agendador idempotente e execução em duas réplicas.
@@ -76,6 +76,8 @@ Passos do fluxo principal: (1) o Fornecimento publica as ofertas; (2) o comprado
 - Alerta ao fornecedor com preço acima do mercado, comparação com preços externos e avaliação de fornecedores (desejáveis citados pelo professor, fora da v1).
 - Notificação ativa (e-mail, SMS, push), SSE ou WebSocket: a sugestão de leilão e o contexto do leilão são só consulta.
 - Cancelar negociação ou leilão já definido; papel de administrador da plataforma; consumo de `lance_realizado`, de `produto_excluido` e de eventos do Identity.
+- Declarar a demanda expirada, encerrar demandas de produto excluído e converter `prazoDesejado` em data de entrega: regras do Demanda, do Pedidos e do Negociação.
+- Criar, efetivar ou cancelar o pedido temporário do leilão: o Pedidos reage ao `leilao_iniciado` e ao `negociacao_fechada` (DG-37 a DG-39).
 
 ## 4. Glossário
 
@@ -92,19 +94,20 @@ Passos do fluxo principal: (1) o Fornecimento publica as ofertas; (2) o comprado
 | Oferta | Fornecimento de um fornecedor para um produto, com `preco` por unidade e `quantidadeDisponivel`, mantido a partir dos eventos do Fornecimento. |
 | Oferta negociável | Oferta com `preco > 0` e `quantidadeDisponivel > 0` (professor: preço ou quantidade zero não aparecem no portal). |
 | Quantidade comprometida | Soma das quantidades aceitas por uma oferta em sugestões `EM_FORMACAO` (RN-17). Fica separada localmente até T1. |
-| Disponível livre | `quantidadeDisponivel − quantidade comprometida` da oferta. É o que a vitrine mostra e o que pode ser usado em negociação direta ou em novo aceite. |
+| Disponível livre | `max(0, quantidadeDisponivel − quantidade comprometida)` da oferta. É o que a vitrine mostra e o que pode ser usado em negociação direta ou em novo aceite. |
 | Demanda | Necessidade de compra de um comprador para um produto: uma `demanda_criada` com `tipo = "UNICA"` (identificada por `demandaId`) ou uma ocorrência de `demanda_recorrente_gerada` (identificada por `ocorrenciaId`, com `demandaOrigemId` = `demandaId` do evento). O identificador da demanda neste serviço é `demandaId` nos dois casos. |
 | Modelo recorrente | `demanda_criada` com `tipo = "RECORRENTE"`. Guardado só para referência; não entra no balanço (RN-08). |
 | Saldo | Quantidade da demanda ainda não atendida: `quantidade − Σ quantidades acordadas`. |
 | Em negociação | Soma das quantidades da demanda em negociações diretas com `situacao = "ABERTA"`. |
 | Saldo negociável | `saldo − em negociação`. Limite da quantidade de uma nova negociação direta (RN-15). |
-| Demanda aberta | Demanda com `situacao = "AGUARDANDO"`. |
+| Prazo vencido | `prazoDesejado` não nulo e `prazoDesejado < agora`. Marcado em `prazoVencido` pelo agendador (RN-10). |
+| Demanda aberta | Demanda com `situacao = "AGUARDANDO"` e `prazoVencido = false`. |
 | Oferta total | Soma do disponível livre das ofertas negociáveis do produto. |
 | Demanda total | Soma do saldo negociável das demandas abertas do produto. |
-| Balanço | Comparação de oferta total e demanda total do produto, com uma das situações: `SEM_DEMANDA` (demanda total = 0), `SEM_OFERTA` (demanda total > 0 e oferta total = 0), `OFERTA_SUFICIENTE` (oferta total ≥ demanda total > 0) ou `DEMANDA_EXCEDENTE` (demanda total > oferta total > 0). |
+| Balanço | Comparação de oferta total e demanda total do produto, consultável por qualquer comprador ou fornecedor sem identificar demandas nem compradores (DG-50), com uma das situações: `SEM_DEMANDA` (demanda total = 0), `SEM_OFERTA` (demanda total > 0 e oferta total = 0), `OFERTA_SUFICIENTE` (oferta total ≥ demanda total > 0) ou `DEMANDA_EXCEDENTE` (demanda total > oferta total > 0). |
 | Excesso de demanda | `demanda total − oferta total`, quando positivo. |
 | Gatilho da sugestão | `oferta total > 0` **e** `demanda total > oferta total × (1 + EXCESSO_DEMANDA_MINIMO_PERCENTUAL / 100)`. |
-| Oferta apta | Para uma demanda: oferta negociável do mesmo `produtoId`, com disponível livre > 0, `preco ≤ precoMaximo` da demanda (quando não nulo) e `fornecedorId` diferente do `compradorId` da demanda. |
+| Oferta apta | Para uma demanda: oferta negociável do mesmo `produtoId`, com disponível livre > 0, `preco ≤ precoMaximo` da demanda (quando não nulo) e `fornecedorId` diferente do `compradorId` da demanda, sendo a demanda aberta (aguardando e sem prazo vencido). |
 | Sugestão de leilão | Registro `SugestaoLeilao` (§6.1) de um produto. É também a janela de formação do lote. |
 | Aceite | Registro `AceiteLeilao` (§6.1): a decisão de um fornecedor de colocar uma quantidade de uma oferta no lote da sugestão. |
 | Fornecedor elegível | Para uma sugestão: empresa dona de oferta negociável do produto com disponível livre > 0, que não tem item em leilão com `situacao = "ABERTA"` do mesmo produto. |
@@ -126,7 +129,7 @@ Passos do fluxo principal: (1) o Fornecimento publica as ofertas; (2) o comprado
 | Dependências permitidas | As versões fixadas em `services/pedidos-service/requirements.txt`: `fastapi==0.162.5`, `starlette==1.10.0`, `uvicorn==0.54.0`, `pydantic==2.14.3`, `psycopg[binary]==3.3.9`, `psycopg-pool==3.3.3`, `alembic==1.20.1`, `SQLAlchemy==2.1.8`, `aiokafka==0.15.0`, `PyJWT[crypto]==2.15.1`, `cryptography==50.0.2`, `simplejson==3.20.2`, `prometheus-client==0.26.0`, além da biblioteca padrão. Nenhuma outra. Os módulos fora de `app/adaptadores/` e `migracoes/` importam somente biblioteca padrão, `fastapi`, `starlette`, `pydantic`, `jwt`, `cryptography`, `simplejson`, `prometheus_client` e o próprio pacote `app`. |
 | Persistência | Somente pela porta `MercadoRepositorio` (§5.1). Proibido guardar produtos, ofertas, demandas, sugestões, aceites, negociações, chaves de idempotência ou eventos processados em variáveis de módulo ou da aplicação. |
 | Estrutura de arquivos | Ver árvore abaixo. `app/__init__.py`, `app/portas.py` e `app/main.py` são obrigatórios. |
-| Ponto de entrada (testes) | `app.main.create_app(event_bus: EventBus, clock: Clock, repositorio: MercadoRepositorio, chaves_publicas: ChavesPublicas, config: ConfigMercado = ConfigMercado(), emissor: str = "identity-service", audiencia: str = "b2b-platform") -> fastapi.FastAPI` e `app.main.executar_prazos(app: fastapi.FastAPI) -> int` (processa janelas de adesão e prazos de demanda vencidos em `clock.now()` e devolve quantos registros mudaram de estado). |
+| Ponto de entrada (testes) | `app.main.create_app(event_bus: EventBus, clock: Clock, repositorio: MercadoRepositorio, chaves_publicas: ChavesPublicas, config: ConfigMercado = ConfigMercado(), emissor: str = "identity-service", audiencia: str = "b2b-platform") -> fastapi.FastAPI` e `app.main.executar_prazos(app: fastapi.FastAPI) -> int` (processa janelas de adesão vencidas e demandas cujo prazo venceu em `clock.now()` e devolve quantos registros mudaram). |
 | Ponto de entrada (execução) | `uvicorn app.main:criar_app_real --factory --host 0.0.0.0 --port 8105`: monta os adaptadores reais a partir das variáveis de ambiente e inicia, como tarefas de fundo, o consumidor Kafka, o publicador da outbox e o agendador (`executar_prazos` a cada 1 s). |
 | Formato de data/hora | Instante (§4). |
 | Formato monetário | Valor monetário (§4). Arredondamento sempre explícito, conforme RN-22 e RN-23. |
@@ -245,7 +248,7 @@ Comportamento das portas:
 - `bloquear_produto(produto_id)` bloqueia o produto até o fim da transação (no PostgreSQL, `SELECT ... FOR UPDATE` numa linha por produto, criada se não existir). **Toda** escrita que muda ofertas, demandas, aceites, sugestões ou negociações de um produto chama `bloquear_produto` antes de validar regras e recalcular o balanço. É isso que serializa o balanço e a sugestão de um produto entre as duas réplicas.
 - Os dicionários trocados com o repositório usam as chaves dos atributos do §6.1, com instantes em `datetime` UTC e valores em `Decimal`.
 - `listar_ofertas_do_produto` devolve todas as ofertas do produto, em qualquer situação. `listar_demandas_abertas` devolve as demandas com `situacao = "AGUARDANDO"` do produto, em ordem de `recebidaEm` crescente e, em empate, `demandaId` crescente.
-- `listar_demandas_vencidas(agora, limite)` devolve até `limite` `demandaId` com `situacao = "AGUARDANDO"`, `prazoDesejado` não nulo e `prazoDesejado < agora`, em ordem de `prazoDesejado`. `listar_janelas_vencidas(agora, limite)` devolve até `limite` `sugestaoId` com `situacao = "EM_FORMACAO"` e `janelaEncerraEm <= agora`, em ordem de `janelaEncerraEm`.
+- `listar_demandas_vencidas(agora, limite)` devolve até `limite` `demandaId` com `situacao = "AGUARDANDO"`, `prazoVencido = false`, `prazoDesejado` não nulo e `prazoDesejado < agora`, em ordem de `prazoDesejado`. `listar_janelas_vencidas(agora, limite)` devolve até `limite` `sugestaoId` com `situacao = "EM_FORMACAO"` e `janelaEncerraEm <= agora`, em ordem de `janelaEncerraEm`.
 - `obter_sugestao_ativa(produto_id)` devolve a sugestão do produto com `situacao` ∈ {`ABERTA`, `EM_FORMACAO`}, ou `None`. Existe no máximo uma por produto (RN-16).
 - `listar_negociacoes` devolve `(itens, total)` em ordem de `definidaEm` decrescente e, em empate, `negociacaoId` decrescente. Entram todas as negociações `LEILAO_DIRETO` e as `VENDA_DIRETA` em que (`escopo == "BUYER"` e `compradorId == empresa`) ou (`escopo == "SUPPLIER"` e `fornecedorId` da oferta == empresa). `modo` e `situacao` `None` = sem filtro.
 - `obter_direta_aberta` devolve a negociação `VENDA_DIRETA` com `situacao = "ABERTA"` daquela demanda e daquela oferta, ou `None`. `listar_leiloes_abertos_do_fornecedor` devolve as negociações `LEILAO_DIRETO` com `situacao = "ABERTA"` do produto com algum item daquele fornecedor.
@@ -303,7 +306,8 @@ Comportamento dos adaptadores reais (não usados pela suíte de aceitação em m
 | prazoDesejado | instante ou `null` | Sim | Do evento. |
 | saldo | quantidade | Sim | Inicial = `quantidade`; reduzido por acordos (RN-27). |
 | emNegociacao | quantidade | Sim | Inicial 0; soma das diretas `ABERTA` (RN-15, RN-27). |
-| situacao | enum | Sim | `AGUARDANDO`, `ATENDIDA`, `CANCELADA`, `EXPIRADA` (§6.2). |
+| situacao | enum | Sim | `AGUARDANDO`, `ATENDIDA`, `CANCELADA` (§6.2). |
+| prazoVencido | booleano | Sim | Inicial `false`; `true` quando o agendador encontra o prazo vencido (RN-10). Não muda a `situacao`. |
 | recebidaEm | instante | Sim | `clock.now()` no consumo. |
 | encerradaEm | instante ou `null` | Sim | Instante da saída de `AGUARDANDO`. |
 
@@ -364,10 +368,9 @@ Tabelas técnicas: `mercado.produto_lock` (uma linha por produto, usada por `blo
 | — | `demanda_criada` `UNICA` ou `demanda_recorrente_gerada` válido | `demandaId` inexistente | `AGUARDANDO` |
 | `AGUARDANDO` | `negociacao_fechada` `ENCERRADO` que zera o saldo | RN-27 | `ATENDIDA` |
 | `AGUARDANDO` | `demanda_cancelada` | RN-09 | `CANCELADA` |
-| `AGUARDANDO` | `executar_prazos` | `prazoDesejado < agora` | `EXPIRADA` |
-| `ATENDIDA`, `CANCELADA`, `EXPIRADA` | qualquer | — | sem mudança (estado final) |
+| `ATENDIDA`, `CANCELADA` | qualquer | — | sem mudança (estado final) |
 
-Negociações diretas `ABERTA` de uma demanda que sai de `AGUARDANDO` continuam até o `negociacao_fechada`; o acordo ainda abate o saldo (RN-27), sem reabrir a demanda.
+Negociações diretas `ABERTA` de uma demanda que sai de `AGUARDANDO` continuam até o `negociacao_fechada`; o acordo ainda abate o saldo (RN-27), sem reabrir a demanda. O prazo vencido não muda a situação: só marca `prazoVencido = true`, o que tira a demanda do balanço e impede novas diretas (RN-10). A expiração da demanda é regra do Demanda (DG-48).
 
 **SugestaoLeilao**
 
@@ -434,7 +437,7 @@ Em qualquer rota, banco indisponível → `503 DEPENDENCIA_INDISPONIVEL`; falha 
 
 #### API-04 — Balanço do produto
 
-Sem corpo. `produtoId` conhecido = presente na cópia de produtos ou referenciado por alguma oferta ou demanda (RN-06). Resposta 200 (cenário E do §8.0):
+Sem corpo. `produtoId` conhecido = presente na cópia de produtos ou referenciado por alguma oferta ou demanda (RN-06). Mostra só totais: nenhuma demanda nem comprador é identificado (DG-50). Resposta 200 (cenário E do §8.0):
 
 ```json
 {
@@ -454,7 +457,7 @@ Sem corpo. `produtoId` conhecido = presente na cópia de produtos ou referenciad
 
 #### API-05 — Vitrine de ofertas
 
-Query opcional: `demandaId` (só com escopo `BUYER`; com `SUPPLIER` → `422 VALIDACAO_INVALIDA`), `page`, `size`. Lista as ofertas negociáveis do produto com disponível livre > 0, na ordem da RN-11. `quantidadeDisponivel` é o disponível livre. `apta` é `null` sem `demandaId` e, com `demandaId`, indica se a oferta é apta para aquela demanda (RN-07). Resposta 200 (cenário E, COMP-A com `demandaId` = DEM-A):
+Query opcional: `demandaId` (só com escopo `BUYER`; com `SUPPLIER` → `422 VALIDACAO_INVALIDA`), `page`, `size`. Lista as ofertas negociáveis do produto com disponível livre > 0, na ordem da RN-11. Preços e fornecedores são públicos para compradores e fornecedores (DG-49). `quantidadeDisponivel` é o disponível livre. `apta` é `null` sem `demandaId` e, com `demandaId`, indica se a oferta é apta para aquela demanda (RN-07). Resposta 200 (cenário E, COMP-A com `demandaId` = DEM-A):
 
 ```json
 {
@@ -500,6 +503,7 @@ Visível só ao comprador dono (RN-13). Resposta 200 (DEM-A depois da CA-26):
   "destino": {"cidade": "Anápolis", "uf": "GO"},
   "prazoDesejado": "2026-11-30T23:59:59.000Z",
   "situacao": "AGUARDANDO",
+  "prazoVencido": false,
   "recebidaEm": "2026-11-20T11:55:00.000Z",
   "encerradaEm": null
 }
@@ -1303,7 +1307,7 @@ Cenário: Demanda visível só ao dono
 ### RF-08 — Abrir negociação direta
 - **Prioridade:** Must
 - **Enunciado (EARS):** Quando um comprador pedir uma negociação direta para uma demanda própria, uma oferta e uma quantidade válidas, o serviço deve criar a negociação `VENDA_DIRETA`, somar a quantidade ao que está em negociação na demanda e publicar `modo_negociacao_definido`.
-- **Regras aplicáveis:** RN-07, RN-14, RN-15, RN-30, RN-34
+- **Regras aplicáveis:** RN-05, RN-07, RN-14, RN-15, RN-29, RN-30, RN-34
 - **Interface:** API-07; tópico `modo_negociacao_definido`
 
 **Critérios de aceitação**
@@ -1432,7 +1436,7 @@ Cenário: Oferta zerada não entra no lote
 ### RF-10 — Fechar o lote e iniciar o leilão em T1
 - **Prioridade:** Must
 - **Enunciado (EARS):** Quando a janela de adesão vencer, todos os fornecedores elegíveis estiverem no lote ou o gatilho da sugestão deixar de valer com aceites registrados, o serviço deve criar o leilão `LEILAO_DIRETO` com os itens aceitos, calcular preço inicial, incremento e participações e publicar `modo_negociacao_definido` e `leilao_iniciado`.
-- **Regras aplicáveis:** RN-21, RN-22, RN-23, RN-33
+- **Regras aplicáveis:** RN-21, RN-22, RN-23, RN-28, RN-29, RN-33
 - **Interface:** `executar_prazos`; API-11; tópicos `modo_negociacao_definido`, `leilao_iniciado`
 
 **Critérios de aceitação**
@@ -1523,21 +1527,23 @@ Cenário: Fechamento desconhecido, repetido ou com demanda de outro comprador
   Então L1 continua "CONCLUIDA"
 ```
 
-### RF-12 — Expirar demandas pelo prazo
+### RF-12 — Retirar do balanço demandas com prazo vencido
 - **Prioridade:** Should
-- **Enunciado (EARS):** Quando `executar_prazos` rodar com `agora` maior que o `prazoDesejado` de uma demanda aguardando, o serviço deve marcá-la como `EXPIRADA` e recalcular o balanço.
+- **Enunciado (EARS):** Quando `executar_prazos` rodar com `agora` maior que o `prazoDesejado` de uma demanda aguardando, o serviço deve marcar `prazoVencido`, retirá-la do balanço e recusar novas negociações diretas para ela, sem mudar a situação da demanda.
 - **Regras aplicáveis:** RN-10, RN-33
 - **Interface:** `executar_prazos`; API-06
 
 **Critérios de aceitação**
 ```gherkin
 # CA-49
-Cenário: Demanda expira depois do prazo
+Cenário: Demanda com prazo vencido sai do balanço
   Dado o cenário S
   Quando executar_prazos roda com agora 2026-11-30T23:59:59.000Z
-  Então DEM-A continua "AGUARDANDO"
+  Então devolve 0 e GET /api/v1/mercado/demandas/DEM-A retorna prazoVencido false
   Quando executar_prazos roda com agora 2026-11-30T23:59:59.001Z
-  Então devolve 1, DEM-A fica "EXPIRADA" com encerradaEm "2026-11-30T23:59:59.001Z" e o balanço de P retorna demandaTotal 0.00
+  Então devolve 1, DEM-A continua "AGUARDANDO" com prazoVencido true e encerradaEm null, e o balanço de P retorna demandaTotal 0.00
+  Quando TK-COMP-A envia POST /api/v1/mercado/negociacoes com {DEM-A, OF-Y, 10.00}
+  Então retorna 409 com codigo "DEMANDA_ENCERRADA"
 ```
 
 ### RF-13 — Consultar negociações
@@ -1673,14 +1679,14 @@ Cenário: Exceção inesperada do repositório
 | RN-04 | Oferta negociável: `preco > 0` e `quantidadeDisponivel > 0`. Quantidade comprometida = soma das quantidades dos aceites da oferta em sugestões `EM_FORMACAO`. Disponível livre = `max(0, quantidadeDisponivel − quantidade comprometida)`. A reserva de estoque feita por pedidos já chega descontada em `quantidadeDisponivel`; o serviço não faz outro desconto. (DG-05, DG-10, PROF-09) | Disponível 60.00 com aceite de 60.00 → livre 0.00. |
 | RN-05 | Escala: valores e quantidades com mais de 2 casas (participação: 4 casas) são rejeitados na entrada; toda conta usa `Decimal` e arredonda só onde a regra manda. | `quantidade` 0.001 → `422 VALIDACAO_INVALIDA`. |
 | RN-06 | Balanço por `produtoId`: oferta total = soma do disponível livre das ofertas negociáveis; demanda total = soma do saldo negociável das demandas abertas; situação conforme o glossário. É recalculado, com `bloquear_produto`, na mesma transação de toda mudança de ofertas, demandas, aceites ou negociações do produto. Quando a situação muda, grava `situacaoDesde = agora`. Depois de cada recálculo, aplica a RN-16 e, se houver sugestão `EM_FORMACAO` com o gatilho falso, a RN-21. Produto conhecido = na cópia de produtos ou referenciado por oferta ou demanda; senão a API-04 e a API-05 respondem `404 PRODUTO_NAO_ENCONTRADO`. (DG-01, DG-02, DG-05, PROF-01) | Cenário E: 100.00 × 130.00 → `DEMANDA_EXCEDENTE`, excesso 30.00. |
-| RN-07 | Aptidão (oferta para demanda): mesmo `produtoId`; oferta negociável com disponível livre > 0; `preco ≤ precoMaximo` quando `precoMaximo` não é nulo; `fornecedorId ≠ compradorId`. A quantidade não precisa cobrir a demanda inteira (atendimento parcial, RN-15). (DG-32) | DEM-A (máx. 9.00) × OF-X a 9.50 → não apta. |
+| RN-07 | Aptidão (oferta para demanda): mesmo `produtoId`; oferta negociável com disponível livre > 0; `preco ≤ precoMaximo` quando `precoMaximo` não é nulo; `fornecedorId ≠ compradorId`; demanda aberta (aguardando e sem prazo vencido; senão `apta = false` para todas as ofertas). A quantidade não precisa cobrir a demanda inteira (atendimento parcial, RN-15). (DG-32) | DEM-A (máx. 9.00) × OF-X a 9.50 → não apta. |
 | RN-08 | Demandas: `demanda_criada` `UNICA` cria a demanda `AGUARDANDO` com `saldo = quantidade`; `RECORRENTE` só grava o modelo (fora do balanço e das rotas); `demanda_recorrente_gerada` cria a demanda com `demandaId = ocorrenciaId` e `demandaOrigemId = demandaId` do evento. `demandaId` já existente (com outro `eventId`) → ignorado, sem DLT. `destino` é obrigatório. (DG-02, DG-03) | Ocorrência ...031 de origem ...003 → demanda ...031. |
 | RN-09 | Cancelamento: se `demandaId` for uma demanda `AGUARDANDO` com o mesmo `compradorId` → `CANCELADA`, `encerradaEm = agora`. Se for um modelo recorrente com o mesmo `compradorId` → modelo cancelado e todas as demandas `AGUARDANDO` com aquele `demandaOrigemId` → `CANCELADA`. Desconhecido, já encerrado ou com outro `compradorId` → ignorado, sem DLT. Negociações diretas abertas da demanda continuam. (DG-04) | Cancelar ...003 → ...031 e ...032 `CANCELADA`. |
-| RN-10 | Expiração: em `executar_prazos`, demanda `AGUARDANDO` com `prazoDesejado < agora` → `EXPIRADA`, `encerradaEm = agora`. `prazoDesejado` nulo não expira. (DG-12) | Prazo 23:59:59.000; agora 23:59:59.001 → `EXPIRADA`. |
-| RN-11 | Vitrine: ofertas negociáveis do produto com disponível livre > 0, em ordem de `preco` crescente; empate por disponível livre decrescente; depois `criadaEm` crescente; depois `fornecimentoId` crescente. A vitrine é o "leilão reverso" do professor: só ordenação, sem evento nem prazo. (PROF-06) | OF-Y 7.50 antes de OF-X 8.00. |
-| RN-12 | Escopos e visibilidade: rotas de negócio aceitam só `BUYER` e `SUPPLIER`, conforme a tabela do §7.2; escopo errado → `403 ACESSO_NEGADO`. Leilões são visíveis a todo token `BUYER` ou `SUPPLIER`. Negociação direta é visível ao comprador (`BUYER` e `compradorId` = empresa) e ao fornecedor da oferta (`SUPPLIER` e `fornecedorId` = empresa); invisível → `404 NEGOCIACAO_NAO_ENCONTRADA`. | COMP-B em D1 de COMP-A → 404. |
+| RN-10 | Prazo vencido: em `executar_prazos`, demanda `AGUARDANDO` com `prazoVencido = false` e `prazoDesejado < agora` passa a `prazoVencido = true`, sem mudar `situacao` nem `encerradaEm`, e o balanço do produto é recalculado. Demanda com prazo vencido não conta no balanço e não abre negociação direta (`409 DEMANDA_ENCERRADA`); diretas já abertas continuam. `prazoDesejado` nulo nunca vence. O Mercado não declara a demanda expirada: isso é regra do Demanda (DG-48). | Prazo 23:59:59.000; agora 23:59:59.001 → `prazoVencido` true, demanda total 0.00. |
+| RN-11 | Vitrine pública para compradores e fornecedores, com preço, quantidade, origem e fornecedor de cada oferta (DG-49): ofertas negociáveis do produto com disponível livre > 0, em ordem de `preco` crescente; empate por disponível livre decrescente; depois `criadaEm` crescente; depois `fornecimentoId` crescente. A vitrine é o "leilão reverso" do professor: só ordenação, sem evento nem prazo. (PROF-06) | OF-Y 7.50 antes de OF-X 8.00. |
+| RN-12 | Escopos e visibilidade: rotas de negócio aceitam só `BUYER` e `SUPPLIER`, conforme a tabela do §7.2; escopo errado → `403 ACESSO_NEGADO`. O balanço (API-04) é consultável por qualquer `BUYER` ou `SUPPLIER`, mesmo sem oferta ou demanda do produto, e mostra só totais (DG-50). Leilões são visíveis a todo token `BUYER` ou `SUPPLIER`. Negociação direta é visível ao comprador (`BUYER` e `compradorId` = empresa) e ao fornecedor da oferta (`SUPPLIER` e `fornecedorId` = empresa); invisível → `404 NEGOCIACAO_NAO_ENCONTRADA`. | COMP-B em D1 de COMP-A → 404. |
 | RN-13 | Demanda visível só ao comprador dono (`BUYER` e `compradorId` = empresa); outra empresa ou demanda inexistente → `404 DEMANDA_NAO_ENCONTRADA`. Vale para a API-06, o `demandaId` da API-05 e da API-07. | COMP-A em DEM-B → 404. |
-| RN-14 | Negociação direta: o comprador escolhe a oferta e a quantidade (o serviço nunca forma pares sozinho). Na ordem do §7.2: demanda visível (RN-13); demanda `AGUARDANDO` (senão `409 DEMANDA_ENCERRADA`); oferta existente e negociável (senão `422 OFERTA_INDISPONIVEL`); mesmo produto (senão `422 PRODUTO_DIFERENTE`); `fornecedorId ≠ compradorId` (senão `403 CONFLITO_DE_INTERESSE`); preço dentro do máximo (senão `422 PRECO_ACIMA_DO_MAXIMO`); nenhuma direta `ABERTA` para o mesmo par demanda × oferta (senão `409 NEGOCIACAO_JA_ABERTA`); quantidade ≤ saldo negociável (senão `422 QUANTIDADE_ACIMA_DO_SALDO`); quantidade ≤ disponível livre (senão `422 QUANTIDADE_INDISPONIVEL`). O preço da oferta é copiado para o item e não muda depois. A abertura é o momento em que o pedido nasce no Pedidos (PROF-03). (DG-30, DG-31, DG-34) | DEM-A + OF-Y 30.00 → 201, `valorItem` 225.00. |
+| RN-14 | Negociação direta: o comprador escolhe a oferta e a quantidade (o serviço nunca forma pares sozinho). Na ordem do §7.2: demanda visível (RN-13); demanda `AGUARDANDO` e sem prazo vencido (senão `409 DEMANDA_ENCERRADA`); oferta existente e negociável (senão `422 OFERTA_INDISPONIVEL`); mesmo produto (senão `422 PRODUTO_DIFERENTE`); `fornecedorId ≠ compradorId` (senão `403 CONFLITO_DE_INTERESSE`); preço dentro do máximo (senão `422 PRECO_ACIMA_DO_MAXIMO`); nenhuma direta `ABERTA` para o mesmo par demanda × oferta (senão `409 NEGOCIACAO_JA_ABERTA`); quantidade ≤ saldo negociável (senão `422 QUANTIDADE_ACIMA_DO_SALDO`); quantidade ≤ disponível livre (senão `422 QUANTIDADE_INDISPONIVEL`). O preço da oferta é copiado para o item e não muda depois. A abertura é o momento em que o pedido nasce no Pedidos (PROF-03). (DG-30, DG-31, DG-34) | DEM-A + OF-Y 30.00 → 201, `valorItem` 225.00. |
 | RN-15 | Saldo: abrir uma direta soma a quantidade em `emNegociacao`. Uma demanda pode ter várias diretas abertas com ofertas diferentes, desde que a soma não passe do saldo. (DG-32, DG-33) | DEM-A 50.00: 30.00 + 20.00 → ok; mais 0.01 → 422. |
 | RN-16 | Sugestão: no máximo uma ativa (`ABERTA` ou `EM_FORMACAO`) por produto. Recalculado o balanço: sem sugestão ativa e gatilho verdadeiro → cria uma `ABERTA`; sugestão `ABERTA` e gatilho falso → `ENCERRADA`. `excessoDemanda` é atualizado a cada recálculo. A API-10 mostra a sugestão à empresa com aceite nela ou que é fornecedor elegível; nunca mostra nomes de outros fornecedores. Sem expiração por tempo. (DG-01, DG-07, DG-09, DG-12) | Oferta nova cobre a demanda → `ENCERRADA` na hora. |
 | RN-17 | Aceite (API-11), na ordem do §7.2: sugestão ativa e, se `EM_FORMACAO`, `agora < janelaEncerraEm` (senão `409 SUGESTAO_ENCERRADA`); oferta existente e negociável (senão `422 OFERTA_INDISPONIVEL`); oferta da empresa do token (senão `403 OFERTA_DE_OUTRA_EMPRESA`); mesmo produto (senão `422 PRODUTO_DIFERENTE`); empresa sem item em leilão `ABERTA` do produto (senão `409 FORNECEDOR_EM_LEILAO`); oferta sem aceite na sugestão (senão `409 ACEITE_JA_REGISTRADO`); quantidade ≤ disponível livre (senão `422 QUANTIDADE_INDISPONIVEL`). Uma empresa pode ter parte do estoque no lote e o resto na direta. (DG-14, DG-15, DG-17) | FORN-Y com OF-Y 40.01 (livre 40.00) → 422. |
@@ -1699,7 +1705,7 @@ Cenário: Exceção inesperada do repositório
 | RN-30 | Idempotência HTTP: escopo = (empresa, `sub`, método, caminho canônico, `Idempotency-Key`). Só respostas 2xx são memorizadas, com status, corpo, `Location` e o hash do corpo da requisição, por 24 h, na mesma transação da mudança. Mesmo escopo e mesmo corpo → mesma resposta, sem efeito e sem evento. Mesmo escopo e outro corpo → `409 IDEMPOTENCIA_CONFLITO`. | Repetir CA-33 com o mesmo corpo → 1 evento. |
 | RN-31 | Consumo: a validação (RN-32) vem antes da deduplicação. Mensagem válida com (`source`, `eventId`) já processado → sem efeito, sem publicação. Efeito e `registrar_evento_processado` na mesma transação. Se a transação falhar (`RepositorioIndisponivel` ou outra exceção), o handler repete até 4 execuções no total, chamando `clock.sleep(1)`, `clock.sleep(2)` e `clock.sleep(4)` entre elas; se a quarta falhar, publica em `mercado.dlt` com `error` `"PROCESSAMENTO_FALHOU"` e `failedAtAttempt` 4, fora da transação que falhou. | 4 falhas → DLT com tentativa 4. |
 | RN-32 | Mensagem consumida inválida (§7.3, RN-03) não altera estado e é publicada em `mercado.dlt` na hora, com `error` `"EVENTO_INVALIDO"`, `failedAtAttempt` 1 e chave conforme §7.4. Não é registrada como processada. O handler nunca propaga exceção. | Envelope sem `payload` → DLT com chave DEM-A. |
-| RN-33 | `executar_prazos` processa, cada um numa transação própria e com `bloquear_produto`, os itens de `listar_janelas_vencidas(agora, 100)` (RN-21 a) e de `listar_demandas_vencidas(agora, 100)` (RN-10), verificando de novo a condição antes de agir. Chamar duas vezes no mesmo instante não repete efeitos. Devolve quantos registros mudaram de estado. | Segunda chamada às 13:00 → 0. |
+| RN-33 | `executar_prazos` processa, cada um numa transação própria e com `bloquear_produto`, os itens de `listar_janelas_vencidas(agora, 100)` (RN-21 a) e de `listar_demandas_vencidas(agora, 100)` (RN-10), verificando de novo a condição antes de agir. Chamar duas vezes no mesmo instante não repete efeitos. Devolve quantos registros mudaram (sugestões fechadas e demandas marcadas com prazo vencido). | Segunda chamada às 13:00 → 0. |
 | RN-34 | Requisição rejeitada (qualquer 4xx ou 5xx) não altera estado, não memoriza idempotência e não publica evento. | Direta com 422 → `emNegociacao` igual. |
 
 ## 10. Catálogo de erros
@@ -1733,7 +1739,7 @@ Formato único de erro (`Content-Type: application/problem+json`), igual ao da E
 | NEGOCIACAO_NAO_ENCONTRADA | 404 | Não encontrado | Negociação não encontrada. | RN-12. |
 | SUGESTAO_NAO_ENCONTRADA | 404 | Não encontrado | Sugestão de leilão não encontrada. | `sugestaoId` inexistente. |
 | ACEITE_NAO_ENCONTRADO | 404 | Não encontrado | Aceite não encontrado. | RN-19. |
-| DEMANDA_ENCERRADA | 409 | Conflito | A demanda não está aguardando oferta. | RN-14. |
+| DEMANDA_ENCERRADA | 409 | Conflito | A demanda não está aguardando oferta ou está com o prazo vencido. | RN-10, RN-14. |
 | NEGOCIACAO_JA_ABERTA | 409 | Conflito | Já existe uma negociação aberta para esta demanda e esta oferta. | RN-14. |
 | SUGESTAO_ENCERRADA | 409 | Conflito | A sugestão de leilão não aceita mais mudanças. | RN-17, RN-19, RN-20. |
 | ACEITE_JA_REGISTRADO | 409 | Conflito | Esta oferta já está no lote. | RN-17. |
@@ -1789,11 +1795,11 @@ Respostas fora do catálogo: rota inexistente (404) e método não permitido (40
 | RF-05 | RN-04, RN-06 | API-04 | CA-15, CA-16, CA-17, CA-18 |
 | RF-06 | RN-06, RN-16 | API-10 | CA-19, CA-20, CA-21 |
 | RF-07 | RN-07, RN-11, RN-13 | API-05, API-06 | CA-22, CA-23, CA-24, CA-25 |
-| RF-08 | RN-07, RN-14, RN-15, RN-30, RN-34 | API-07, `modo_negociacao_definido` | CA-26, CA-27, CA-28, CA-29, CA-30, CA-31, CA-32, CA-33 |
+| RF-08 | RN-05, RN-07, RN-14, RN-15, RN-29, RN-30, RN-34 | API-07, `modo_negociacao_definido` | CA-26, CA-27, CA-28, CA-29, CA-30, CA-31, CA-32, CA-33 |
 | RF-09 | RN-04, RN-16 a RN-20, RN-34 | API-11, API-12, API-13 | CA-34, CA-35, CA-36, CA-37, CA-38 |
-| RF-10 | RN-21, RN-22, RN-23, RN-33 | `executar_prazos`, API-11, `modo_negociacao_definido`, `leilao_iniciado` | CA-39, CA-40, CA-41, CA-42, CA-43 |
+| RF-10 | RN-21, RN-22, RN-23, RN-28, RN-29, RN-33 | `executar_prazos`, API-11, `modo_negociacao_definido`, `leilao_iniciado` | CA-39, CA-40, CA-41, CA-42, CA-43 |
 | RF-11 | RN-25, RN-26, RN-27 | `negociacao_fechada`, API-06, API-09 | CA-44, CA-45, CA-46, CA-47, CA-48 |
-| RF-12 | RN-10, RN-33 | `executar_prazos`, API-06 | CA-49. Exceção justificada: não há cenário de erro, porque a expiração não recebe entrada externa; o caso-limite (instante igual ao prazo) está no próprio CA. |
+| RF-12 | RN-10, RN-14, RN-33 | `executar_prazos`, API-06, API-07 | CA-49. O mesmo CA cobre o erro (`409 DEMANDA_ENCERRADA` ao abrir direta com prazo vencido) e o caso-limite (instante igual ao prazo). |
 | RF-13 | RN-12, RN-24 | API-08, API-09 | CA-50, CA-51, CA-52 |
 | RF-14 | RN-12, RN-34 | §7.1 | CA-53, CA-54 |
 | RF-15 | RN-31, RN-32 | §7.3, `mercado.dlt` | CA-55, CA-56, CA-57 |
@@ -1839,7 +1845,7 @@ Decisões do autor (Brunno Alexcson), tomadas a partir das respostas do professo
 | DG-09 | Decisão | Quem vê a sugestão | Fornecedores com oferta do produto e disponível livre > 0; só consulta, sem notificação. ↻ Evento para um serviço de notificação. |
 | DG-10 | Decisão | Leilão compartilhado | A sugestão é a janela de formação do lote; adesão opcional; lote de um só fornecedor é válido; separação local até T1. ↻ Leilão individual; janela como entidade separada. Status Report: sim. |
 | DG-11 | Decisão | Lance no lote inteiro | Sem lance parcial (PROF-05). ↻ Leilão de várias unidades (custo alto, na Negociação). |
-| DG-12 | Decisão | Sugestão sem aceite | Continua enquanto houver excesso; a escassez é resolvida na negociação direta, por quem abre primeiro; demandas sem oferta aguardam. ↻ Prioridade por maior `precoMaximo`. |
+| DG-12 | Decisão | Sugestão sem aceite | Continua enquanto houver excesso; a escassez é resolvida na negociação direta, por quem abre primeiro; demandas sem oferta aguardam até serem atendidas, canceladas ou terem o prazo vencido (DG-48). ↻ Prioridade por maior `precoMaximo`. |
 | DG-13 | Decisão | T1 e T2 | Definidos pelo sistema: T1 pela RN-21; T2 = T1 + `LEILAO_DURACAO_HORAS`. ↻ O fornecedor que abre escolhe a duração; T2 limitado pelo menor `prazoDesejado`. Status Report: sim. |
 | DG-14 | Decisão | Entrada no lote | Por conta própria, até T1. ↻ Inclusão automática por preferência na oferta. |
 | DG-15 | Decisão | Quantidade no lote | O fornecedor escolhe, até o disponível livre. ↻ Sempre todo o disponível. |
@@ -1864,6 +1870,20 @@ Decisões do autor (Brunno Alexcson), tomadas a partir das respostas do professo
 | DG-34 | Decisão | Preço negociado | Vale só para o pedido; o Mercado não usa o valor acordado. |
 | DG-35 | Decisão | Nomes dos modos | `VENDA_DIRETA` e `LEILAO_DIRETO`, como no kit, no diagrama e na ESP-NEG-001; sem `LEILAO_REVERSO`. Substitui `NEGOCIACAO_DIRETA` e `LEILAO` da v0.2. |
 | DG-36 | Decisão | Formato do documento | Modelo ERS-LLM v1.2 do QA, em `docs/mercado/requisitos.md`, com contratos em `docs/mercado/contratos/`, seguindo a convenção `docs/<serviço>/` do README do repositório (como `docs/pedidos/`). Substitui a v0.2 do mesmo arquivo. |
+| DG-37 | Decisão | Gatilho do pedido temporário | Proposta: o Pedidos cria o pedido temporário a partir de `leilao_iniciado`, que já traz fornecimento, fornecedor, quantidade e preço de cada item. Decisão final do Pedidos (INT-MRC-02). ↻ Tópico `pedido_temporario_solicitado` publicado pelo Negociação (ESP-NEG-001); sem custo para o Mercado. |
+| DG-38 | Decisão | Pedido por item do lote | Proposta: um pedido temporário por item (um por fornecimento), como exigem a ESP-PED-001, a reserva do Fornecimento e a origem única do frete. Decisão final do Pedidos. ↻ Pedido com vários itens; sem custo para o Mercado. |
+| DG-39 | Decisão | Comprador e solicitante | No leilão, o pedido temporário nasce com `compradorId` nulo e recebe o vencedor no `negociacao_fechada`; na direta, nasce com o comprador. O solicitante é o Mercado, por meio do `leilao_iniciado` (`source` = `mercado-service`); o Mercado não chama o Pedidos. |
+| DG-40 | Decisão | Consumo de `negociacao_fechada` | O Mercado consome para encerrar a negociação e abater o saldo (RN-25 a RN-27). Pendências: Infra registrar o consumidor; Negociação aceitar o `demandaId` opcional. |
+| DG-41 | Decisão | `lance_realizado` | Não consumido; o resultado chega pelo `negociacao_fechada`. Pedir à Infra que retire o Mercado da lista do `CONTRACTS.md`. ↻ Consumir para estatísticas de preço. |
+| DG-42 | Decisão | Evento de sugestão | Sem tópico próprio; a sugestão é só consulta (DG-09). ↻ Evento para serviço de notificação. |
+| DG-43 | Decisão | Alteração de preço da oferta | Resolvida pelo `fornecimento_atualizado` (contrato v2.0 do Fornecimento), consumido pelo Mercado (RN-01). Pendência: Infra criar o tópico. |
+| DG-44 | Decisão | `demanda_cancelada` | Consumido; demanda aguardando vira `CANCELADA`; diretas abertas continuam; leilões não são afetados (RN-09, DG-08). ↻ Encerrar as diretas abertas (exige evento novo para o Negociação). |
+| DG-45 | Decisão | Demanda recorrente | Qualquer chave aceita na `demanda_recorrente_gerada`; ocorrência identificada por `ocorrenciaId`; modelo fora do balanço; `frequencia` não usada no cálculo (DG-02, DG-03). |
+| DG-46 | Decisão | Referência dos contratos | `CONTRACTS.md` do kit (`eventVersion`, chaves em camelCase, `produto_cadastrado`); as divergências do `ORIENTACOES` não são seguidas. Pendência: confirmação da Infra. |
+| DG-47 | Decisão | Exclusão de produto | `produto_excluido` não é consumido: só se exclui produto sem fornecimento e sem pedido (RN-12 e RN-13 do Fornecimento), então não há oferta, negociação nem sugestão a ajustar. Demandas de produto excluído devem ser canceladas pelo Demanda. ↻ Consumir e responder 404 no balanço e na vitrine. |
+| DG-48 | Decisão | Prazo da demanda | Expirar a demanda é regra do Demanda. O Mercado só deixa de contar no balanço a demanda com prazo vencido e recusa novas diretas para ela (RN-10); a situação não muda. ↻ Marcar `EXPIRADA` localmente (como na v0.3). |
+| DG-49 | Decisão | Preços na vitrine | Públicos para compradores e fornecedores, como num marketplace: o fornecedor vê os preços dos concorrentes (professor: "mostrar o menor preço", "princípio da publicidade"). ↻ Vitrine só para compradores. Status Report: opcional. |
+| DG-50 | Decisão | O que o fornecedor vê da demanda | Só os totais do produto no balanço, sem demandas nem compradores; qualquer fornecedor pode consultar, para a procura atrair fornecedores (professor). ↻ Mostrar também quantidade de demandas e UFs de destino agregadas. |
 | PR-01 | Premissa | Intervalo entre T1 e a reserva | Em T1 a separação local é liberada; até chegar o `estoque_atualizado` da reserva do pedido temporário, a quantidade do lote volta a contar como disponível livre. Uma direta aberta nesse intervalo pode ter a reserva recusada pelo Fornecimento. Aceito na v1 (consistência eventual). |
 | PR-02 | Premissa | Fim do leilão | Este serviço não acompanha T2; a negociação só muda com o `negociacao_fechada`. |
 | PR-03 | Premissa | Ordem entre tópicos | Demanda ou oferta podem chegar antes do produto; o balanço usa o `produtoId` e a unidade do evento até o produto chegar (RN-03). |
@@ -1873,9 +1893,9 @@ Decisões do autor (Brunno Alexcson), tomadas a partir das respostas do professo
 | ID | Tipo | Descrição | Decisão |
 |---|---|---|---|
 | INT-MRC-01 | Questão de integração → **Negociação** (Caio) | Divergências com a ESP-NEG-001 (branch `docs/esp-negociacao`) | Esta ESP define o papel do Mercado no fluxo (decisão do grupo, apoiada no diagrama: "inicia leilões quando necessário" e as setas de `modo_negociacao_definido` e `leilao_iniciado` saindo do Mercado). Ajustes pedidos à Negociação: (a) consumir `modo_negociacao_definido` e `leilao_iniciado` em vez de criar leilão e direta por HTTP (D16, INT-NEG-03); (b) datas pelo sistema (DG-13) em vez de `dataInicio`/`dataFim` do fornecedor (D24); (c) rateio pela participação no valor enviada pelo Mercado (DG-22) em vez do volume (D19, RN-15); (d) incremento mínimo enviado pelo Mercado (DG-20) em vez de "sem incremento" (D22); (e) `demandaId` opcional no lance e no `negociacao_fechada` (DG-27), ausente na D11; (f) saída do lote antes de T1 é do Mercado (DG-18). Pontos já alinhados: leilão conjunto, lance no lote inteiro, preço inicial pela soma ponderada, qualquer comprador dá lance, conflito de interesse, sem leilão reverso, deserto, formato `alocacoes` do `negociacao_fechada`. Situação: a discutir no grupo. |
-| INT-MRC-02 | Questão de integração → **Pedidos** (Daniel) | Gatilho dos pedidos | Criar o pedido da direta a partir de `modo_negociacao_definido` (`VENDA_DIRETA`) e um pedido temporário sem comprador por item a partir de `leilao_iniciado`; efetivar ou cancelar com `negociacao_fechada`. A ESP-PED-001 hoje cria o pedido só no fechamento. Situação: a combinar. |
+| INT-MRC-02 | Questão de integração → **Pedidos** (Daniel) | Pedido na abertura | Alterar a ESP-PED-001 para: criar o pedido da direta a partir de `modo_negociacao_definido` (`VENDA_DIRETA`), com comprador e destino; criar um pedido temporário sem comprador por item a partir de `leilao_iniciado`; efetivar (comprador e valor) ou cancelar com `negociacao_fechada`; trocar `UNIQUE(negociacao_id)` por `UNIQUE(negociacao_id, fornecimento_id)`; dispensar a reserva antecipada (P-29), já que a reserva passa a ser o próprio pedido. Base: professor (F7, F14 e transcrição). Propostas DG-37 a DG-39. Situação: a pedir. |
 | INT-MRC-03 | Questão de integração → **Infra** (Pedro) | Tópicos e catálogo | Criar `demanda_cancelada`, `produto_atualizado` e `fornecimento_atualizado`; registrar este serviço como consumidor dos 9 tópicos do §7.3 e como produtor de `modo_negociacao_definido`, `leilao_iniciado` e `mercado.dlt`; retirar o Mercado da lista de consumidores de `lance_realizado` no `CONTRACTS.md`; rota `/api/v1/mercado` no gateway para as duas réplicas. Situação: depois da INT-MRC-01. |
-| INT-MRC-04 | Questão de integração → **Compra e Demanda** (Lucca) | Ajustes nos contratos | Os quatro pedidos da DG-03. Situação: enviado em 17/11, aguardando resposta. |
+| INT-MRC-04 | Questão de integração → **Compra e Demanda** (Lucca) | Ajustes nos contratos | Os quatro pedidos da DG-03 (enviados em 17/11, aguardando resposta). A sugerir: cancelar, com `demanda_cancelada`, as demandas de produto excluído (DG-47); se o Demanda criar um evento de expiração, o Mercado passa a consumi-lo (DG-48). |
 | INT-MRC-05 | Questão de integração → **Fornecimento** (Davi) | Consumo das ofertas e produtos | Registrar o `mercado-service` como consumidor de `produto_cadastrado`, `produto_atualizado`, `fornecimento_criado`, `fornecimento_atualizado` e `estoque_atualizado` (contrato v2.0 já indica o Mercado no `fornecimento_atualizado`). Situação: a comunicar. |
 | INT-MRC-06 | Questão de integração → **Banco de Dados** | DDL do schema `mercado` | Validar as tabelas do §6.1, `NUMERIC(18,4)` para dinheiro e `NUMERIC(12,2)` para quantidade (o DR-BD-002 usa inteiro). Situação: pendente. |
 | INT-MRC-07 | Questão de integração → **Autenticação** | Erro e escopos | Formato de erro com `codigo` (mesma pendência da INT-PED-08 e da INT-NEG-07); escopos `BUYER` e `SUPPLIER`. Situação: registrada. |
@@ -1888,11 +1908,11 @@ Dúvidas levantadas que não foram decididas nesta versão. Ficam para a próxim
 
 | Tema | Pontos | Situação |
 |---|---|---|
-| Integração com o Pedidos | Detalhes do pedido temporário: um por item do lote, `compradorId` nulo até o fechamento, solicitante e mudanças na ESP-PED-001 | INT-MRC-02 |
-| Contratos de eventos | Aceite final dos payloads de `modo_negociacao_definido` e `leilao_iniciado` pela Negociação e pelo Pedidos; referência oficial do kit (`CONTRACTS.md` × `ORIENTACOES`); tópicos fora do catálogo | INT-MRC-01, INT-MRC-03 |
-| Regras de dados | Fuso para converter `prazoDesejado` em `dataEntregaDesejada`; status de oferta pausada; segunda oferta do mesmo fornecedor e produto (professor: "não usual") | Próxima versão |
-| Visibilidade e interface | Detalhes de tela; avaliação de fornecedores (0 a 5 estrelas); alerta de preço acima do mercado; comparação com preço externo | INT-MRC-08; desejáveis fora da v1 |
-| Plataforma e entrega | Administrador da plataforma; formato `entrega_grupo/`; padrão de erro da turma; DDL oficial | INT-MRC-06, INT-MRC-07, INT-MRC-09 |
+| Integração com o Pedidos | Propostas do Mercado registradas (DG-37 a DG-39); a decisão e a alteração da ESP-PED-001 são do Pedidos | INT-MRC-02 |
+| Contratos de eventos | Decididos do lado do Mercado (DG-40 a DG-47); falta o aceite dos payloads de `modo_negociacao_definido` e `leilao_iniciado` pela Negociação e pelo Pedidos e a criação dos tópicos pela Infra | INT-MRC-01 a INT-MRC-03 |
+| Regras de dados de outros serviços | Expiração da demanda (Demanda, DG-48); fuso para converter `prazoDesejado` em `dataEntregaDesejada` (Pedidos e Negociação); oferta pausada e segunda oferta do mesmo fornecedor e produto (Fornecimento; professor: "não usual") | Outros grupos |
+| Visibilidade e interface | Decididas as regras do Mercado (DG-49, DG-50); detalhes de tela, avaliação de fornecedores (0 a 5 estrelas), alerta de preço acima do mercado e comparação com preço externo | INT-MRC-08; desejáveis fora da v1 |
+| Plataforma e entrega | Administrador da plataforma; formato `entrega_grupo/`; padrão de erro da turma; DDL oficial; origem das regras citadas no boilerplate do kit | INT-MRC-06, INT-MRC-07, INT-MRC-09 |
 
 ### 13.1 Casos de borda obrigatórios
 
@@ -1917,7 +1937,7 @@ Dúvidas levantadas que não foram decididas nesta versão. Ficam para a próxim
 Pré-conferência do autor antes do gate G1; o QA confirma ou desmarca cada item.
 
 - [x] Nenhum `{{ }}` restante; comentários de orientação removidos.
-- [x] Todo RF tem enunciado EARS, prioridade e CAs de sucesso e erro quando aplicáveis; exceções justificadas na matriz (RF-12).
+- [x] Todo RF tem enunciado EARS, prioridade e CAs de sucesso e erro quando aplicáveis; sem exceções (o RF-12 cobre o erro no próprio CA).
 - [x] Todo CA usa valores concretos e resultado observável.
 - [x] Todo código de erro citado em CA existe no §10 e vice-versa.
 - [x] Ordem de verificação de erros definida para cada endpoint.
@@ -1936,4 +1956,5 @@ Pré-conferência do autor antes do gate G1; o QA confirma ou desmarca cada item
 |---|---|---|---|
 | 0.1 | 2026-11-12 | Brunno Alexcson | Criação em `docs/mercado/requisitos.md`, no formato da ESP-PED-001, com os contratos publicados pelos grupos parceiros e a regra de modos D-10 do kit. |
 | 0.2 | 2026-11-16 | Brunno Alexcson | Respostas do professor (PROF-01 a PROF-12): pedido temporário na abertura do leilão, leilão em lote com rateio, "leilão reverso" como vitrine, balanço por produto e sugestão ao fornecedor. |
+| 0.4 | 2026-11-18 | Brunno Alexcson | Decisões DG-37 a DG-50: propostas ao Pedidos para o pedido temporário; contratos de eventos fechados do lado do Mercado; prazo vencido tira a demanda do balanço sem expirá-la (RN-10, RF-12; sai a situação `EXPIRADA`); vitrine e balanço públicos com totais; INT-MRC-02 e INT-MRC-04 atualizadas; §13.2 revisada. |
 | 0.3 | 2026-11-18 | Brunno Alexcson | Reescrita no modelo ERS-LLM v1.2 do QA (DG-36); decisões DG-01 a DG-35; negociação direta pedida pelo comprador com saldo e atendimento parcial; leilão compartilhado formado pela sugestão; contratos e schemas em `docs/mercado/contratos/`; divergências com a ESP-NEG-001 na INT-MRC-01; dúvidas não decididas no §13.2. |

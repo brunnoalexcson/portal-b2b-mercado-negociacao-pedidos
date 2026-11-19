@@ -4,11 +4,11 @@ Responsável: Brunno Alexcson. Porta `8105`, rotas `/api/v1/mercado`, schema Pos
 
 O serviço acompanha, por produto, a oferta disponível e a demanda aberta do portal e decide como cada compra é negociada: negociação direta entre um comprador e a oferta que ele escolher, ou leilão em lote quando a demanda supera a oferta e os fornecedores aceitam a sugestão de leilão. É o bloco 5 do diagrama da arquitetura ("calcula oferta vs demanda, define modo de negociação, inicia leilões quando necessário").
 
-## Situação em 18/11/2026
+## Situação em 18/11/2026 (v0.4)
 
 | Item | Situação |
 |---|---|
-| Especificação (ESP-MRC-001 v0.3) | Rascunho no modelo ERS-LLM v1.2 do QA, antes do gate G1 |
+| Especificação (ESP-MRC-001 v0.4) | Rascunho no modelo ERS-LLM v1.2 do QA, antes do gate G1; 17 RFs, 59 CAs, decisões DG-01 a DG-50 |
 | Contratos de eventos | Schemas JSON e exemplos validados para os 12 tópicos |
 | Código (`services/mercado-service/`) | Não iniciado; segue a estrutura do `pedidos-service` |
 | Alinhamento com Negociação e Pedidos | Divergências na INT-MRC-01 e na INT-MRC-02, **a discutir no grupo** |
@@ -16,7 +16,7 @@ O serviço acompanha, por produto, a oferta disponível e a demanda aberta do po
 
 ## Documentos
 
-- [Especificação ESP-MRC-001](requisitos.md): regras, rotas, eventos, erros, critérios de aceitação e decisões DG-01 a DG-36 (seção 13).
+- [Especificação ESP-MRC-001](requisitos.md): regras, rotas, eventos, erros, critérios de aceitação e decisões DG-01 a DG-50, pendências de integração INT-MRC-01 a INT-MRC-09 e pontos fora desta versão (seção 13).
 - [Contratos de eventos](contratos/): um `<topico>.schema.json` (JSON Schema 2020-12) e um `<topico>.exemplo.json` por tópico consumido e publicado.
 
 ## Como o serviço funciona
@@ -25,7 +25,9 @@ O serviço acompanha, por produto, a oferta disponível e a demanda aberta do po
 
 1. Recebe produtos, ofertas e demandas pelos eventos dos serviços de origem.
 2. A cada evento, recalcula o balanço do produto: oferta total (disponível livre das ofertas) × demanda total (saldo negociável das demandas abertas).
-3. Mostra a vitrine do produto pelo menor preço (o "leilão reverso" do professor) e indica quais ofertas servem para a demanda do comprador.
+3. Mostra a vitrine do produto pelo menor preço (o "leilão reverso" do professor), pública para compradores e fornecedores, e indica quais ofertas servem para a demanda do comprador.
+4. O balanço mostra só totais: nenhum fornecedor vê quem são os compradores.
+5. Demanda com prazo vencido deixa de contar no balanço e não abre negociação direta; declarar a demanda expirada é do Demanda.
 
 **Negociação direta (`VENDA_DIRETA`)**
 
@@ -65,15 +67,17 @@ Detalhes na seção 13 da ESP (INT-MRC-01 e INT-MRC-02).
 - Rateio pela `participacao` no valor enviada pelo Mercado, e incremento mínimo enviado no `leilao_iniciado`.
 - `demandaId` opcional no lance e no `negociacao_fechada`, para o Mercado saber qual demanda o vencedor atendeu.
 
-**Pedidos**
-- Criar o pedido da direta a partir de `modo_negociacao_definido` e um pedido temporário sem comprador por item a partir de `leilao_iniciado`; efetivar ou cancelar com `negociacao_fechada`.
+**Pedidos** (o professor determinou que o pedido nasce na abertura)
+- Criar o pedido da direta a partir de `modo_negociacao_definido`, já com comprador e destino.
+- Criar um pedido temporário sem comprador por item do lote a partir de `leilao_iniciado`; o solicitante é o Mercado.
+- Efetivar (comprador e valor) ou cancelar com `negociacao_fechada`; um pedido por `negociacaoId` + `fornecimentoId`; a reserva antecipada (P-29) deixa de ser necessária.
 
 ## Pendências com outros grupos
 
 | Grupo | Pendência |
 |---|---|
-| Infra | Criar `demanda_cancelada`, `produto_atualizado` e `fornecimento_atualizado`; registrar o Mercado como produtor e consumidor dos tópicos; rota do gateway |
-| Compra e Demanda | Ajustes pedidos em 17/11 (`precoMaximo`, `frequencia`, `ocorrenciaId` no cancelamento, edição) |
+| Infra | Criar `demanda_cancelada`, `produto_atualizado` e `fornecimento_atualizado`; registrar o Mercado como produtor e consumidor dos tópicos; retirar o Mercado dos consumidores de `lance_realizado`; rota do gateway |
+| Compra e Demanda | Ajustes pedidos em 17/11 (`precoMaximo`, `frequencia`, `ocorrenciaId` no cancelamento, edição); cancelar demandas de produto excluído |
 | Fornecimento | Registrar o Mercado como consumidor dos eventos de produto e oferta |
 | Banco de Dados | DDL do schema `mercado` e quantidade decimal |
 | Autenticação | Padrão de erro com `codigo` |
