@@ -1,0 +1,18 @@
+{
+  "eventId": "37000000-0000-4000-8000-000000000000",
+  "eventType": "entrega_concluida",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T12:00:00.000Z",
+  "source": "logistica-service",
+  "correlationId": "teste-ped-01",
+  "aggregateId": "32000000-0000-4000-8000-000000000001",
+  "payload": {
+    "pedidoId": "32000000-0000-4000-8000-000000000001",
+    "entregaId": "ent-go-31",
+    "transportadoraId": "tra-go-8",
+    "entregueEm": "2026-11-23T16:00:00.000Z",
+    "prazoPrometido": "2026-11-23T21:00:00.000Z",
+    "noPrazo": true,
+    "atrasoHoras": 0
+  }
+}

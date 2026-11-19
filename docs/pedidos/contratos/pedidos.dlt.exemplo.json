@@ -1,0 +1,23 @@
+{
+  "eventId": "37000000-0000-4000-8000-000009000000",
+  "eventType": "pedidos.dlt",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T12:00:00.000Z",
+  "source": "pedidos-service",
+  "correlationId": "teste-ped-01",
+  "aggregateId": "32000000-0000-4000-8000-000000000001",
+  "payload": {
+    "originalEvent": {
+      "eventId": "37000000-0000-4000-8000-000000000201",
+      "eventType": "frete_selecionado",
+      "eventVersion": "1.0",
+      "timestamp": "2026-11-20T14:00:00.000Z",
+      "source": "logistica-service",
+      "correlationId": "teste-ped-01",
+      "aggregateId": "32000000-0000-4000-8000-000000000001"
+    },
+    "error": "EVENTO_INVALIDO",
+    "stackTrace": "ValidationError: payload ausente",
+    "failedAtAttempt": 1
+  }
+}

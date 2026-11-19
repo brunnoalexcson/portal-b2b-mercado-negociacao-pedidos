@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/pedidos/contratos/pedido_criado.schema.json",
+  "title": "pedido_criado",
+  "description": "Publicado pelo pedidos-service (ESP-PED-001 v2.1, §7.4). Pedido temporário: compradorId e destino são null. Chave Kafka e aggregateId: pedidoId.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "eventType": {
+      "const": "pedido_criado"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 com Z ou offset explícito."
+    },
+    "source": {
+      "const": "pedidos-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "pedidoId",
+        "negociacaoId",
+        "compradorId",
+        "fornecedorId",
+        "produtoId",
+        "fornecimentoId",
+        "produtoNome",
+        "quantidade",
+        "unidade",
+        "pesoKg",
+        "tipoTransporte",
+        "valorTotal",
+        "origem",
+        "destino",
+        "status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pedidoId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "negociacaoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "compradorId": {
+          "type": "null"
+        },
+        "fornecedorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "produtoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "fornecimentoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "produtoNome": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "\\S"
+        },
+        "quantidade": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 9999999999.99,
+          "description": "Até 2 casas decimais."
+        },
+        "unidade": {
+          "enum": [
+            "KG",
+            "TON",
+            "UN",
+            "CX",
+            "L"
+          ]
+        },
+        "pesoKg": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Quilos, até 3 casas decimais."
+        },
+        "tipoTransporte": {
+          "enum": [
+            "GRANEL",
+            "REFRIGERADO",
+            "CARGA_SECA",
+            "PERIGOSO"
+          ]
+        },
+        "valorTotal": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 99999999999999.98,
+          "description": "BRL, até 2 casas decimais."
+        },
+        "origem": {
+          "type": "object",
+          "required": [
+            "cidade",
+            "uf"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "cidade": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "\\S"
+            },
+            "uf": {
+              "enum": [
+                "AC",
+                "AL",
+                "AP",
+                "AM",
+                "BA",
+                "CE",
+                "DF",
+                "ES",
+                "GO",
+                "MA",
+                "MT",
+                "MS",
+                "MG",
+                "PA",
+                "PB",
+                "PR",
+                "PE",
+                "PI",
+                "RJ",
+                "RN",
+                "RS",
+                "RO",
+                "RR",
+                "SC",
+                "SP",
+                "SE",
+                "TO"
+              ]
+            }
+          }
+        },
+        "destino": {
+          "type": "null"
+        },
+        "status": {
+          "const": "CRIADO"
+        }
+      }
+    }
+  }
+}

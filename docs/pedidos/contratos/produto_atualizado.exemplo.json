@@ -1,0 +1,16 @@
+{
+  "eventId": "37000000-0000-4000-8000-000010000000",
+  "eventType": "produto_atualizado",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T12:00:00.000Z",
+  "source": "produtos-service",
+  "correlationId": "teste-ped-01",
+  "aggregateId": "35000000-0000-4000-8000-000000000001",
+  "payload": {
+    "produtoId": "35000000-0000-4000-8000-000000000001",
+    "nome": "Milho em grão tipo 1",
+    "unidade": "TON",
+    "tipoTransporte": "GRANEL",
+    "pesoUnitarioKg": null
+  }
+}

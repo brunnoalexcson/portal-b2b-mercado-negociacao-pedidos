@@ -1,0 +1,22 @@
+{
+  "eventId": "37000000-0000-4000-8000-000004000000",
+  "eventType": "frete_selecionado",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T12:00:00.000Z",
+  "source": "logistica-service",
+  "correlationId": "teste-ped-01",
+  "aggregateId": "32000000-0000-4000-8000-000000000001",
+  "payload": {
+    "pedidoId": "32000000-0000-4000-8000-000000000001",
+    "solicitacaoFreteId": "sol-go-21",
+    "entregaId": "ent-go-31",
+    "cotacaoId": "cot-go-18",
+    "transportadoraId": "tra-go-8",
+    "tentativa": 1,
+    "preco": 150.0,
+    "prazoDias": 2,
+    "dataEntregaPrevista": "2026-11-23",
+    "criterio": "ESCOLHA_COMPRADOR",
+    "status": "FRETE_SELECIONADO"
+  }
+}

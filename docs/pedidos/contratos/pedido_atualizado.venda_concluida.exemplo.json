@@ -1,0 +1,21 @@
+{
+  "eventId": "37000000-0000-4000-8000-000006000001",
+  "eventType": "pedido_atualizado",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T12:00:00.000Z",
+  "source": "pedidos-service",
+  "correlationId": "teste-ped-01",
+  "aggregateId": "32000000-0000-4000-8000-000000000001",
+  "payload": {
+    "pedidoId": "32000000-0000-4000-8000-000000000001",
+    "negociacaoId": "31000000-0000-4000-8000-000000000001",
+    "fornecimentoId": "34000000-0000-4000-8000-000000000001",
+    "status": "VENDA_CONCLUIDA",
+    "statusAnterior": "CRIADO",
+    "reservaSituacao": "CONFIRMADA",
+    "versao": 3,
+    "compradorId": "b2000000-0000-4000-8000-000000000002",
+    "valorUnitario": 130.0,
+    "valorTotal": 650.0
+  }
+}

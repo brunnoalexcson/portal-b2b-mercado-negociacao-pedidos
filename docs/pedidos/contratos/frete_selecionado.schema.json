@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/pedidos/contratos/frete_selecionado.schema.json",
+  "title": "frete_selecionado",
+  "description": "Consumido pelo pedidos-service (ESP-PED-001 v2.1, §7.3). Campos adicionais do produtor são aceitos e ignorados. Chave Kafka e aggregateId: pedidoId.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "eventType": {
+      "const": "frete_selecionado"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 com Z ou offset explícito."
+    },
+    "source": {
+      "const": "logistica-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "pedidoId",
+        "solicitacaoFreteId",
+        "entregaId",
+        "cotacaoId",
+        "transportadoraId",
+        "tentativa",
+        "preco",
+        "prazoDias",
+        "status"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "pedidoId": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "solicitacaoFreteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "entregaId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "cotacaoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "transportadoraId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "tentativa": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "preco": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 99999999999999.98,
+          "description": "BRL, até 2 casas decimais."
+        },
+        "prazoDias": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dataEntregaPrevista": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "date"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "const": "FRETE_SELECIONADO"
+        }
+      }
+    }
+  }
+}

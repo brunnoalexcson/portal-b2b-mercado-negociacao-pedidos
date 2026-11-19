@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/pedidos/contratos/fornecimento_criado.schema.json",
+  "title": "fornecimento_criado",
+  "description": "Consumido pelo pedidos-service (ESP-PED-001 v2.1, §7.3). Campos adicionais do produtor são aceitos e ignorados. Chave Kafka e aggregateId: fornecimentoId.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "eventType": {
+      "const": "fornecimento_criado"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 com Z ou offset explícito."
+    },
+    "source": {
+      "const": "fornecimentos-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "fornecimentoId",
+        "fornecedorId",
+        "produtoId",
+        "unidade",
+        "origem"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "fornecimentoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "fornecedorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "produtoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "unidade": {
+          "enum": [
+            "KG",
+            "TON",
+            "UN",
+            "CX",
+            "L"
+          ]
+        },
+        "origem": {
+          "type": "object",
+          "required": [
+            "cidade",
+            "uf"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "cidade": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "\\S"
+            },
+            "uf": {
+              "enum": [
+                "AC",
+                "AL",
+                "AP",
+                "AM",
+                "BA",
+                "CE",
+                "DF",
+                "ES",
+                "GO",
+                "MA",
+                "MT",
+                "MS",
+                "MG",
+                "PA",
+                "PB",
+                "PR",
+                "PE",
+                "PI",
+                "RJ",
+                "RN",
+                "RS",
+                "RO",
+                "RR",
+                "SC",
+                "SP",
+                "SE",
+                "TO"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

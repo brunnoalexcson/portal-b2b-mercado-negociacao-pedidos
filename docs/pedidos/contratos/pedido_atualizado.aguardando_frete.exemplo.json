@@ -1,0 +1,36 @@
+{
+  "eventId": "37000000-0000-4000-8000-000006000002",
+  "eventType": "pedido_atualizado",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T12:00:00.000Z",
+  "source": "pedidos-service",
+  "correlationId": "teste-ped-01",
+  "aggregateId": "32000000-0000-4000-8000-000000000001",
+  "payload": {
+    "pedidoId": "32000000-0000-4000-8000-000000000001",
+    "negociacaoId": "31000000-0000-4000-8000-000000000001",
+    "fornecimentoId": "34000000-0000-4000-8000-000000000001",
+    "status": "AGUARDANDO_FRETE",
+    "statusAnterior": "VENDA_CONCLUIDA",
+    "reservaSituacao": "CONFIRMADA",
+    "versao": 4,
+    "compradorId": "b2000000-0000-4000-8000-000000000002",
+    "fornecedorId": "a1000000-0000-4000-8000-000000000001",
+    "produtoId": "35000000-0000-4000-8000-000000000001",
+    "produtoNome": "Milho em grão",
+    "quantidade": 5.0,
+    "unidade": "TON",
+    "pesoKg": 5000,
+    "tipoTransporte": "GRANEL",
+    "valorTotal": 650.0,
+    "origem": {
+      "cidade": "Rio Verde",
+      "uf": "GO"
+    },
+    "destino": {
+      "cidade": "Anápolis",
+      "uf": "GO"
+    },
+    "dataEntregaDesejada": "2026-11-27"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "eventId": "37000000-0000-4000-8000-000003000000",
+  "eventType": "frete_indisponivel",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T12:00:00.000Z",
+  "source": "logistica-service",
+  "correlationId": "teste-ped-01",
+  "aggregateId": "32000000-0000-4000-8000-000000000001",
+  "payload": {
+    "pedidoId": "32000000-0000-4000-8000-000000000001",
+    "solicitacaoFreteId": "sol-go-21",
+    "motivo": "SEM_COTACAO",
+    "detalhe": "Prazo de cotação expirado.",
+    "ocorridoEm": "2026-11-21T02:00:00.000Z"
+  }
+}

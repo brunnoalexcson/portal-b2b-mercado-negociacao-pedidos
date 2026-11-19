@@ -1,0 +1,29 @@
+{
+  "eventId": "37000000-0000-4000-8000-000007000000",
+  "eventType": "pedido_criado",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T12:00:00.000Z",
+  "source": "pedidos-service",
+  "correlationId": "teste-ped-01",
+  "aggregateId": "32000000-0000-4000-8000-000000000001",
+  "payload": {
+    "pedidoId": "32000000-0000-4000-8000-000000000001",
+    "negociacaoId": "31000000-0000-4000-8000-000000000001",
+    "compradorId": null,
+    "fornecedorId": "a1000000-0000-4000-8000-000000000001",
+    "produtoId": "35000000-0000-4000-8000-000000000001",
+    "fornecimentoId": "34000000-0000-4000-8000-000000000001",
+    "produtoNome": "Milho em grão",
+    "quantidade": 5.0,
+    "unidade": "TON",
+    "pesoKg": 5000,
+    "tipoTransporte": "GRANEL",
+    "valorTotal": 600.0,
+    "origem": {
+      "cidade": "Rio Verde",
+      "uf": "GO"
+    },
+    "destino": null,
+    "status": "CRIADO"
+  }
+}
