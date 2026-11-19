@@ -9,9 +9,9 @@ O serviço registra o pedido que bloqueia o estoque de uma oferta durante a nego
 | Item | Situação |
 |---|---|
 | Especificação (ESP-PED-001 v2.1) | No modelo **ERS-LLM v1.2 do QA**, como a ESP-MRC-001: 10 RFs, 39 critérios de aceitação em Gherkin, 29 regras, 11 RNFs. Conteúdo aprovado em 19/11 (v2.0, processo AED, 5 rodadas de revisão independente). Pronta para o gate G1. |
-| Contratos de eventos | Schemas JSON 2020-12 e exemplos validados para os 14 tópicos consumidos e publicados. Compatíveis com os contratos da Negociação (`926dfb8`), do Mercado (`809d4c4`) e do Fornecimento (`56da541`). |
-| Código (`services/pedidos-service/`) | Primeiro fluxo (v1.1) implementado e testado. Falta adaptar ao pedido temporário da v2.0. |
-| Alinhamento com Negociação e Mercado | **Divergência no gatilho do pedido temporário** (ver abaixo), a decidir no grupo. |
+| Contratos de eventos | Schemas JSON 2020-12 e exemplos validados para os 14 tópicos consumidos e publicados. Compatíveis com os contratos da Negociação (`926dfb8`), do Mercado (`5c8e8a2`) e do Fornecimento (`56da541`). |
+| Código (`services/pedidos-service/`) | Primeiro fluxo (v1.1) implementado e testado. Falta adaptar ao pedido temporário da v2.1. |
+| Alinhamento com Negociação e Mercado | Fluxo combinado em 19/11 (ver abaixo), registrado na ESP-MRC-001 v0.5. |
 
 ## Documentos
 
@@ -45,25 +45,27 @@ Fora do escopo: nota fiscal, pagamento, comissão, cancelamento manual e estorno
 
 A API usa o JWT RS256 do Identity-Service, validado localmente pela JWKS. Erros em `application/problem+json` com `codigo` e `correlationId`.
 
-## Divergência a decidir no grupo: quem pede o pedido temporário
+## Fluxo combinado no grupo: quem pede o pedido temporário
 
-As especificações de Negociação e de Mercado propõem gatilhos diferentes para o pedido temporário:
+Combinado em 19/11 entre Mercado, Negociação e Pedidos (ESP-MRC-001 v0.5, DG-37 a DG-39 e DG-51):
 
-| | ESP-NEG-001 (Caio, 17/11) | ESP-MRC-001 v0.3 (Brunno, 18/11) |
-|---|---|---|
-| Quem forma o leilão | Fornecedor cria na Negociação, por HTTP. Outros fornecedores entram até `dataInicio`. | Mercado abre uma sugestão. Os fornecedores aderem no Mercado, e o lote fecha em T1. |
-| Evento para Pedidos | `pedido_temporario_solicitado`, um por oferta, quando a oferta entra | `leilao_iniciado` com `itens[]` em T1; na direta, `modo_negociacao_definido` com comprador e destino |
-| Quando reserva | Antes dos lances. A oferta só entra no lote com a reserva confirmada. | Depois de T1, com o lote já fixado. A ESP-MRC-001 aceita que, nesse intervalo, outra negociação use o mesmo saldo e a reserva seja recusada (PR-01). |
-| `negociacao_fechada` | `alocacoes` com `pedidoId` | Igual, com `demandaId` opcional |
+```text
+Mercado forma o lote ──leilao_iniciado / modo_negociacao_definido──► Negociação
+Negociação ──pedido_temporario_solicitado (um por item)──► Pedidos ──pedido_criado──► Fornecimento reserva
+Pedidos ──pedido_atualizado (reservaSituacao)──► Negociação
+   item com reserva recusada sai do lote antes do primeiro lance
+   os lances só começam com a reserva de todos os itens confirmada
+Negociação ──negociacao_fechada (alocacoes, compradorId)──► Pedidos
+```
 
-**Posição de Pedidos:** a ESP-PED-001 v2.0 segue a ESP-NEG-001, porque nela o lote só contém ofertas com reserva confirmada. Isso evita vender uma oferta cujo estoque foi recusado. O `negociacao_fechada` das duas propostas já é compatível com o nosso schema. Se o grupo escolher o modelo do Mercado, Pedidos troca só a entrada da RN-06 e do §7.3 (ler `leilao_iniciado.itens[]` e `modo_negociacao_definido.ofertas[]`), e a ESP sobe para a v2.2. Com isso, na direta o comprador e o destino viriam desde a abertura.
+Pedidos não consome eventos do Mercado. O pedido temporário nasce sem comprador, na direta e no leilão, e o destino vem depois, pela API de Pedidos. O `demandaId` que o Mercado acrescenta ao `negociacao_fechada` é aceito e ignorado.
 
 ## Pendências com outros grupos
 
 | Grupo | Pendência |
 |---|---|
 | **Logística (crítico)** | Ignorar `pedido_criado` sem comprador, cotar no `AGUARDANDO_FRETE`, não concluir a venda na entrega, não cancelar em `frete_indisponivel` e reabrir a cotação. Sem isso, a Logística cotaria pedidos temporários. |
-| Negociação e Mercado | Decidir o gatilho do pedido temporário (seção acima) e validar os contratos de Negociação. |
+| Negociação | Validar os contratos de `pedido_temporario_solicitado`, `negociacao_fechada` e `pedido_atualizado` e republicar o fechamento corrigido em caso de `FECHAMENTO_INCOMPATIVEL`. |
 | Fornecimento | Resposta na issue #1 e deduplicação da baixa |
 | Infra | Tópicos novos, consumidores no `CONTRACTS.md` e rota no gateway |
 | Autenticação | `iss` e `aud` reais, `PLATFORM_ADMIN` e formato de erro |
