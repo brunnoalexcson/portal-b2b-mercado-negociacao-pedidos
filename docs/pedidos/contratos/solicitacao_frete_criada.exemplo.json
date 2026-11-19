@@ -1,0 +1,14 @@
+{
+  "eventId": "37000000-0000-4000-8000-000013000000",
+  "eventType": "solicitacao_frete_criada",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T12:00:00.000Z",
+  "source": "logistica-service",
+  "correlationId": "teste-ped-01",
+  "aggregateId": "sol-go-21",
+  "payload": {
+    "solicitacaoFreteId": "sol-go-21",
+    "pedidoId": "32000000-0000-4000-8000-000000000001",
+    "status": "ABERTA"
+  }
+}

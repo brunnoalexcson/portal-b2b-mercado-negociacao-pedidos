@@ -1,0 +1,29 @@
+{
+  "eventId": "37000000-0000-4000-8000-000000000006",
+  "eventType": "demanda_criada",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T11:55:00.000Z",
+  "source": "demanda-service",
+  "correlationId": "teste-mrc-dem",
+  "aggregateId": "36000000-0000-4000-8000-000000000001",
+  "payload": {
+    "demandaId": "36000000-0000-4000-8000-000000000001",
+    "compradorId": "30000000-0000-4000-8000-000000000001",
+    "produtoId": "35000000-0000-4000-8000-000000000001",
+    "unidade": "TON",
+    "quantidade": 50.00,
+    "precoMaximo": 9.00,
+    "destino": {
+      "cidade": "Anápolis",
+      "uf": "GO"
+    },
+    "prazoDesejado": "2026-11-30T23:59:59Z",
+    "tipo": "UNICA",
+    "frequencia": null,
+    "criadoPor": {
+      "empresaId": "30000000-0000-4000-8000-000000000001",
+      "usuarioId": "usr-3"
+    },
+    "criadoEm": "2026-11-20T11:55:00.000Z"
+  }
+}

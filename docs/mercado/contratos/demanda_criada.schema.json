@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/mercado/contratos/demanda_criada.schema.json",
+  "title": "demanda_criada",
+  "description": "Consumido pelo mercado-service (RF-03). tipo UNICA entra no balanço; tipo RECORRENTE é o modelo da recorrência e não entra (RN-08). Chave: demandaId.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "eventType": {
+      "const": "demanda_criada"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "const": "demanda-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "demandaId",
+        "compradorId",
+        "produtoId",
+        "unidade",
+        "quantidade",
+        "destino",
+        "tipo",
+        "criadoEm"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "demandaId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "compradorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "produtoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "unidade": {
+          "enum": [
+            "KG",
+            "TON",
+            "UN",
+            "CX",
+            "L"
+          ]
+        },
+        "quantidade": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "precoMaximo": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        },
+        "destino": {
+          "type": "object",
+          "required": [
+            "cidade",
+            "uf"
+          ],
+          "additionalProperties": true,
+          "properties": {
+            "cidade": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "uf": {
+              "type": "string",
+              "pattern": "^[A-Z]{2}$"
+            }
+          }
+        },
+        "prazoDesejado": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "tipo": {
+          "enum": [
+            "UNICA",
+            "RECORRENTE"
+          ]
+        },
+        "criadoEm": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

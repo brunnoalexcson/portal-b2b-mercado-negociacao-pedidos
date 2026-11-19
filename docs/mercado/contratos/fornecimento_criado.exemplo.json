@@ -1,0 +1,26 @@
+{
+  "eventId": "37000000-0000-4000-8000-000000000003",
+  "eventType": "fornecimento_criado",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T11:40:00.000Z",
+  "source": "fornecimentos-service",
+  "correlationId": "teste-mrc-forn",
+  "aggregateId": "34000000-0000-4000-8000-000000000001",
+  "payload": {
+    "fornecimentoId": "34000000-0000-4000-8000-000000000001",
+    "fornecedorId": "30000000-0000-4000-8000-000000000002",
+    "produtoId": "35000000-0000-4000-8000-000000000001",
+    "unidade": "TON",
+    "preco": 8.00,
+    "quantidadeDisponivel": 60.00,
+    "origem": {
+      "cidade": "Rio Verde",
+      "uf": "GO"
+    },
+    "criadoPor": {
+      "empresaId": "30000000-0000-4000-8000-000000000002",
+      "usuarioId": "usr-7"
+    },
+    "criadoEm": "2026-11-20T11:40:00.000Z"
+  }
+}

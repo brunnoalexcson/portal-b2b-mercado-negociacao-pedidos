@@ -6,15 +6,15 @@ Projeto da disciplina de Sistemas Distribuídos. Este repositório reúne os ser
 
 | Serviço | Responsabilidade | Situação |
 | --- | --- | --- |
-| Mercado | Cruzar ofertas e demandas e encaminhar o resultado para Negociação. | Contribuição em preparação. Caminho previsto: `services/mercado-service/`. |
-| [Negociação/Leilão](docs/negociacao/) | Conduzir leilões e negociações diretas e publicar o resultado para Pedidos. | Especificação ESP-NEG-001 em rascunho, antes do gate G1, e contratos de eventos prontos. Código previsto em `services/negociacao-service/`. |
-| [Pedidos](services/pedidos-service/) | Criar um pedido a partir do resultado da negociação e manter sua consulta e seu histórico. | Primeiro fluxo implementado e demonstrado localmente. |
+| [Mercado](docs/mercado/) | Calcular oferta × demanda por produto, mostrar a vitrine pelo menor preço, abrir a negociação direta e iniciar leilões em lote quando a demanda supera a oferta. | Especificação ESP-MRC-001 v0.5 no modelo ERS-LLM do QA, com contratos de eventos. Código previsto em `services/mercado-service/`. |
+| [Negociação/Leilão](docs/negociacao/) | Conduzir os leilões que o Mercado inicia e as negociações diretas e publicar o resultado para Pedidos e Mercado. | Especificação ESP-NEG-001 v1.2 no modelo ERS-LLM do QA, com contratos de eventos. Código previsto em `services/negociacao-service/`. |
+| [Pedidos](docs/pedidos/) | Criar o pedido temporário que reserva o estoque na abertura da negociação, efetivar ou cancelar no fechamento e acompanhar destino, frete e entrega. | Especificação ESP-PED-001 v2.1 no modelo ERS-LLM do QA, com contratos de eventos. Código do primeiro fluxo (v1.1) em `services/pedidos-service/`, a adaptar à v2.1. |
 
 ## Fluxo de Pedidos
 
-Pedidos consome `negociacao_fechada`, combina o resultado com os dados de produto e fornecimento e grava o pedido em `CRIADO`. A mesma transação registra o histórico e o evento `pedido_criado` na outbox. O publicador envia o evento ao Redpanda, e a API permite consultar o pedido pelo gateway.
+Na abertura de um leilão ou de uma negociação direta, Pedidos cria um pedido temporário, sem comprador, para cada oferta. O `pedido_criado` desse pedido faz o Fornecimento reservar o estoque. No fechamento (`negociacao_fechada`), os pedidos vendidos vão a `VENDA_CONCLUIDA` (baixa do estoque) e os demais a `CANCELADO` (liberação). Depois, o comprador informa o destino, a Logística cota e seleciona o frete, e a entrega encerra o pedido. Detalhes na [visão geral de Pedidos](docs/pedidos/README.md).
 
-A demonstração roda com FastAPI, PostgreSQL 16, Redpanda, Nginx e duas réplicas de Pedidos. Os eventos de outros serviços e a autenticação vêm de componentes de teste. A homologação com os serviços da turma está descrita na especificação.
+A demonstração do primeiro fluxo (v1.1) roda com FastAPI, PostgreSQL 16, Redpanda, Nginx e duas réplicas de Pedidos. Os eventos de outros serviços e a autenticação vêm de componentes de teste.
 
 ## Estrutura
 
@@ -25,12 +25,17 @@ A demonstração roda com FastAPI, PostgreSQL 16, Redpanda, Nginx e duas réplic
 │   │   └── negociacao/
 │   ├── especificacoes/
 │   │   └── ESP-NEG-001_Negociacao.md
+│   ├── mercado/
+│   │   ├── README.md
+│   │   ├── requisitos.md
+│   │   └── contratos/
 │   ├── negociacao/
 │   │   ├── README.md
 │   │   └── adr/
 │   └── pedidos/
+│       ├── README.md
 │       ├── requisitos.md
-│       └── historico/
+│       └── contratos/
 └── services/
     └── pedidos-service/
         ├── app/
@@ -57,8 +62,9 @@ O teste publica uma negociação fechada, verifica a reentrega sem duplicação 
 
 ## Documentação
 
-- [Especificação de Pedidos (ESP-PED-001)](docs/pedidos/requisitos.md)
-- [Negociação e Leilão: visão geral e propostas para Mercado e Pedidos](docs/negociacao/README.md)
-- [Especificação de Negociação e Leilão (ESP-NEG-001)](docs/especificacoes/ESP-NEG-001_Negociacao.md) e [contratos de eventos](docs/contratos/negociacao/)
-- [Plano de implementação e integração inicial](docs/pedidos/historico/plano-de-implementacao.md)
-- [Rascunho VIES original](docs/pedidos/historico/requisitos-vies.md) e [requisitos iniciais em PDF](docs/pedidos/historico/requisitos-pedidos.pdf)
+- [Mercado: visão geral, fronteiras e pendências](docs/mercado/README.md)
+- [Especificação de Mercado (ESP-MRC-001 v0.5, ERS-LLM)](docs/mercado/requisitos.md) e [contratos de eventos](docs/mercado/contratos/)
+- [Negociação e Leilão: visão geral, fronteiras e pendências](docs/negociacao/README.md)
+- [Especificação de Negociação e Leilão (ESP-NEG-001 v1.2, ERS-LLM)](docs/especificacoes/ESP-NEG-001_Negociacao.md) e [contratos de eventos](docs/contratos/negociacao/)
+- [Pedidos: visão geral, fronteiras e pendências](docs/pedidos/README.md)
+- [Especificação de Pedidos (ESP-PED-001 v2.1, ERS-LLM)](docs/pedidos/requisitos.md) e [contratos de eventos](docs/pedidos/contratos/)

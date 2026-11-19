@@ -1,0 +1,17 @@
+{
+  "eventId": "37000000-0000-4000-8000-000012000000",
+  "eventType": "reserva_estoque_recusada",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T12:00:00.000Z",
+  "source": "fornecimentos-service",
+  "correlationId": "teste-ped-01",
+  "aggregateId": "32000000-0000-4000-8000-000000000001",
+  "payload": {
+    "pedidoId": "32000000-0000-4000-8000-000000000001",
+    "fornecimentoId": "34000000-0000-4000-8000-000000000001",
+    "quantidadeSolicitada": 5.0,
+    "quantidadeDisponivel": 2.0,
+    "motivo": "ESTOQUE_INSUFICIENTE",
+    "recusadoEm": "2026-11-20T12:00:04.000Z"
+  }
+}

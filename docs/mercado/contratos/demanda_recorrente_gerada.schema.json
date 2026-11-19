@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/mercado/contratos/demanda_recorrente_gerada.schema.json",
+  "title": "demanda_recorrente_gerada",
+  "description": "Consumido pelo mercado-service (RF-03). Cada ocorrência entra no balanço como uma demanda, identificada por ocorrenciaId; demandaId é a demanda recorrente de origem. A chave pode ser qualquer uma das duas (RN-08).",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "eventType": {
+      "const": "demanda_recorrente_gerada"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "const": "demanda-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "demandaId",
+        "ocorrenciaId",
+        "compradorId",
+        "produtoId",
+        "unidade",
+        "quantidade",
+        "destino",
+        "geradoEm"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "demandaId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "compradorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "produtoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "unidade": {
+          "enum": [
+            "KG",
+            "TON",
+            "UN",
+            "CX",
+            "L"
+          ]
+        },
+        "quantidade": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "precoMaximo": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        },
+        "destino": {
+          "type": "object",
+          "required": [
+            "cidade",
+            "uf"
+          ],
+          "additionalProperties": true,
+          "properties": {
+            "cidade": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            },
+            "uf": {
+              "type": "string",
+              "pattern": "^[A-Z]{2}$"
+            }
+          }
+        },
+        "prazoDesejado": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "ocorrenciaId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "geradoEm": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

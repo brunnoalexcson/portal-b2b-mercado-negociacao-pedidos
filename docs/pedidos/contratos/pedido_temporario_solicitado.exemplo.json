@@ -1,0 +1,18 @@
+{
+  "eventId": "37000000-0000-4000-8000-000008000000",
+  "eventType": "pedido_temporario_solicitado",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T12:00:00.000Z",
+  "source": "negociacao-service",
+  "correlationId": "teste-ped-01",
+  "aggregateId": "31000000-0000-4000-8000-000000000001",
+  "payload": {
+    "negociacaoId": "31000000-0000-4000-8000-000000000001",
+    "tipo": "LEILAO",
+    "fornecimentoId": "34000000-0000-4000-8000-000000000001",
+    "fornecedorId": "a1000000-0000-4000-8000-000000000001",
+    "produtoId": "35000000-0000-4000-8000-000000000001",
+    "quantidade": 5.0,
+    "precoUnitario": 120.0
+  }
+}

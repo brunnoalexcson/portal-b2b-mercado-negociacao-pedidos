@@ -1,0 +1,19 @@
+{
+  "eventId": "37000000-0000-4000-8000-000000000008",
+  "eventType": "demanda_cancelada",
+  "eventVersion": "1.0",
+  "timestamp": "2026-11-20T13:00:00.000Z",
+  "source": "demanda-service",
+  "correlationId": "teste-mrc-dem",
+  "aggregateId": "36000000-0000-4000-8000-000000000001",
+  "payload": {
+    "demandaId": "36000000-0000-4000-8000-000000000001",
+    "compradorId": "30000000-0000-4000-8000-000000000001",
+    "motivo": "Compra feita por outro canal",
+    "canceladoEm": "2026-11-20T13:00:00.000Z",
+    "canceladoPor": {
+      "empresaId": "30000000-0000-4000-8000-000000000001",
+      "usuarioId": "usr-3"
+    }
+  }
+}

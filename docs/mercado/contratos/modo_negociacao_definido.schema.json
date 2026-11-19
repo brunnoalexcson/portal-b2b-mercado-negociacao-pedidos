@@ -1,0 +1,278 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/mercado/contratos/modo_negociacao_definido.schema.json",
+  "title": "modo_negociacao_definido",
+  "description": "Publicado pelo mercado-service quando abre uma negociação direta (RF-08) ou fecha o lote de um leilão (RF-10). Consumidor: negociacao-service, que abre a negociação com o mesmo negociacaoId e pede o pedido temporário de cada oferta com pedido_temporario_solicitado (DG-51, DG-52). Chave: negociacaoId.",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "timestamp",
+    "source",
+    "correlationId",
+    "aggregateId",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "eventType": {
+      "const": "modo_negociacao_definido"
+    },
+    "eventVersion": {
+      "const": "1.0"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "const": "mercado-service"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._-]+$"
+    },
+    "aggregateId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "negociacaoId",
+        "modo",
+        "produtoId",
+        "unidade",
+        "quantidadeTotal",
+        "valorReferencia",
+        "demandas",
+        "ofertas",
+        "definidaEm"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "negociacaoId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "modo": {
+          "enum": [
+            "VENDA_DIRETA",
+            "LEILAO_DIRETO"
+          ]
+        },
+        "produtoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "unidade": {
+          "enum": [
+            "KG",
+            "TON",
+            "UN",
+            "CX",
+            "L"
+          ]
+        },
+        "quantidadeTotal": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "valorReferencia": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "demandas": {
+          "type": "array",
+          "maxItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "demandaId",
+              "demandaOrigemId",
+              "compradorId",
+              "quantidade",
+              "precoMaximo",
+              "destino",
+              "prazoDesejado"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "demandaId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "demandaOrigemId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "compradorId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "quantidade": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "precoMaximo": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "exclusiveMinimum": 0
+              },
+              "destino": {
+                "type": "object",
+                "required": [
+                  "cidade",
+                  "uf"
+                ],
+                "additionalProperties": true,
+                "properties": {
+                  "cidade": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "uf": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{2}$"
+                  }
+                }
+              },
+              "prazoDesejado": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "ofertas": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "fornecimentoId",
+              "fornecedorId",
+              "quantidade",
+              "precoUnitario",
+              "valorItem",
+              "participacao",
+              "origem"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "fornecimentoId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "fornecedorId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "quantidade": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "precoUnitario": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "valorItem": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "participacao": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1
+              },
+              "origem": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "cidade",
+                  "uf"
+                ],
+                "additionalProperties": true,
+                "properties": {
+                  "cidade": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "\\S"
+                  },
+                  "uf": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{2}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "definidaEm": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "modo": {
+                "const": "VENDA_DIRETA"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "demandas": {
+                "minItems": 1
+              },
+              "ofertas": {
+                "maxItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "modo": {
+                "const": "LEILAO_DIRETO"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "demandas": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
