@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/pedidos/contratos/pedidos.dlt.schema.json",
   "title": "pedidos.dlt",
-  "description": "Publicado pelo pedidos-service com as mensagens rejeitadas (ESP-PED-001 v2.1, §7.4). Chave Kafka e aggregateId: chave original ou topico:particao:offset.",
+  "description": "Publicado pelo pedidos-service com as mensagens rejeitadas (ESP-PED-001 v2.2, §7.4). Chave Kafka e aggregateId: chave original ou topico:particao:offset.",
   "type": "object",
   "required": [
     "eventId",

@@ -1,4 +1,4 @@
-"""Gera schemas JSON (2020-12) e exemplos dos contratos de Pedidos a partir da ESP-PED-001 v2.1, e valida cada exemplo."""
+"""Gera schemas JSON (2020-12) e exemplos dos contratos de Pedidos a partir da ESP-PED-001 v2.2, e valida cada exemplo."""
 import json, sys
 from pathlib import Path
 from jsonschema import Draft202012Validator, FormatChecker
@@ -19,7 +19,7 @@ DT = {"type": "string", "format": "date-time", "description": "ISO 8601 com Z ou
 DATA = {"type": "string", "format": "date"}
 NOME = {"type": "string", "minLength": 1, "maxLength": 255, "pattern": "\\S"}
 LOCAL = {"type": "object", "required": ["cidade", "uf"], "additionalProperties": False,
-         "properties": {"cidade": {"type": "string", "minLength": 1, "maxLength": 120, "pattern": "\\S"},
+         "properties": {"cidade": {"type": "string", "minLength": 1, "maxLength": 255, "pattern": "\\S"},
                         "uf": {"enum": UFS}}}
 UNIDADE = {"enum": ["KG", "TON", "UN", "CX", "L"]}
 TRANSPORTE = {"enum": ["GRANEL", "REFRIGERADO", "CARGA_SECA", "PERIGOSO"]}
@@ -60,8 +60,8 @@ FRETE = obj({"solicitacaoFreteId": TXT, "entregaId": TXT, "cotacaoId": TXT, "tra
 CARGA = ["compradorId", "fornecedorId", "produtoId", "produtoNome", "quantidade", "unidade", "pesoKg",
          "tipoTransporte", "valorTotal", "origem", "destino"]
 
-E = "Consumido pelo pedidos-service (ESP-PED-001 v2.1, §7.3). Campos adicionais do produtor são aceitos e ignorados."
-P = "Publicado pelo pedidos-service (ESP-PED-001 v2.1, §7.4)."
+E = "Consumido pelo pedidos-service (ESP-PED-001 v2.2, §7.3). Campos adicionais do produtor são aceitos e ignorados."
+P = "Publicado pelo pedidos-service (ESP-PED-001 v2.2, §7.4)."
 
 TOPICOS = {
     "pedido_temporario_solicitado": ("negociacao-service", "negociacaoId", E, obj({
@@ -76,7 +76,7 @@ TOPICOS = {
                 "else": {"properties": {"compradorId": {"type": "null"}, "alocacoes": {"maxItems": 0}}}}])),
     "produto_cadastrado": ("produtos-service", "produtoId", E, obj({
         "produtoId": TXT, "nome": NOME, "unidade": UNIDADE,
-        "tipoTransporte": TRANSPORTE, "pesoUnitarioKg": nulo({"type": "number", "exclusiveMinimum": 0, "maximum": 99999.999,
+        "tipoTransporte": TRANSPORTE, "pesoUnitarioKg": nulo({"type": "number", "exclusiveMinimum": 0, "maximum": 999999999.999,
                                                                  "description": "Até 3 casas decimais."})},
         required=["produtoId", "nome", "unidade", "tipoTransporte"])),
     "fornecimento_criado": ("fornecimentos-service", "fornecimentoId", E, obj({
@@ -126,7 +126,7 @@ TOPICOS = {
             ("CANCELADO", ["motivo"]), ("VENDA_CONCLUIDA", ["compradorId", "valorUnitario", "valorTotal"]),
             ("AGUARDANDO_FRETE", CARGA), ("FRETE_SELECIONADO", ["frete"]), ("ENTREGUE", ["entregueEm"])]])),
     "pedidos.dlt": ("pedidos-service", "chave original ou topico:particao:offset",
-                    "Publicado pelo pedidos-service com as mensagens rejeitadas (ESP-PED-001 v2.1, §7.4).", obj({
+                    "Publicado pelo pedidos-service com as mensagens rejeitadas (ESP-PED-001 v2.2, §7.4).", obj({
         "originalEvent": {"description": "Objeto original, string truncada em 64 KiB ou null."},
         "error": {"enum": ["EVENTO_INVALIDO", "CONTRATO_DIVERGENTE", "FECHAMENTO_INCOMPATIVEL", "TENTATIVAS_ESGOTADAS"]},
         "stackTrace": nulo({"type": "string"}),

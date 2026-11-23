@@ -5,12 +5,12 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-PED-001 |
-| Versão | 2.1 |
-| Status | Em revisão (conteúdo aprovado pelo autor em 2026-11-19; aguarda o gate G1 do QA) |
+| Versão | 2.2 |
+| Status | Em revisão (conteúdo aprovado pelo autor em 2026-11-19 e atualizado em 2026-11-23; aguarda o gate G1 do QA) |
 | Serviço / Bounded context | `pedidos-service` (Portal B2B Distribuído): Pedidos. Porta `8107`, rotas `/api/v1/pedidos`, schema PostgreSQL `pedidos`, role `svc_pedidos` |
 | Autores (PO / Dev / QA) | PO e Dev: Daniel Junio (grupo Mercado, Negociação/Leilão e Pedidos). QA: Grupo de Teste e Qualidade (revisão no gate G1) |
-| Data | 2026-11-19 |
-| Documentos relacionados | Diagrama "Arquitetura do Portal B2B Distribuído"; ESP-NEG-001 (branch `docs/esp-negociacao`, revisão `926dfb8`); ESP-MRC-001 v0.5 (`docs/mercado/requisitos.md`, revisão `5c8e8a2`); contratos de eventos em `docs/pedidos/contratos/`; kit de Infraestrutura (`CONTRACTS.md`, revisão `630515c`); contrato de eventos v2.0 do Fornecimento (revisão `56da541`); proposta da Logística para Pedidos (revisão `0ad3d21`); Identity-Service; DR-BD-002 v1.0; modelo ERS-LLM v1.2 do QA (revisão `efc05b6`). |
+| Data | 2026-11-23 |
+| Documentos relacionados | Diagrama "Arquitetura do Portal B2B Distribuído"; ESP-NEG-001 (branch `docs/esp-negociacao`, revisão `926dfb8`); ESP-MRC-001 v0.5 (`docs/mercado/requisitos.md`, revisão `5c8e8a2`); contratos de eventos em `docs/pedidos/contratos/`; kit de Infraestrutura (`CONTRACTS.md`, revisão `630515c`); contrato de eventos v2.0 do Fornecimento (revisão `56da541`); ESP-LOG-001 v1.4 da Logística (revisão `4758182`, resposta na issue ArrozbR/portal-b2b-logistica-transporte#1); ESP-FRN-001 e ESP-PRD-001 do Fornecimento e Produtos; Identity-Service (revisão `a763ed5`, `Docs/Alinhamento-Respostas-Equipes.md` §3.4, resposta na issue Matheus-Allvz/Identity-Service#27); DR-BD-002 v1.0; modelo ERS-LLM v1.2 do QA (revisão `efc05b6`). |
 
 ## 1. Diretivas para a LLM geradora
 
@@ -85,12 +85,12 @@ Passos do fluxo: (1) o Fornecimento publica as ofertas; (2–5) Demanda, Mercado
 | Data | `YYYY-MM-DD`. |
 | Valor monetário | Reais (BRL). Na API e nos eventos: número JSON (nunca string), com no máximo 2 casas na entrada e exatamente 2 casas na saída. Máximo `99999999999999.99`. No código, `decimal.Decimal`; `float` é proibido. No banco, `NUMERIC(18,4)`. |
 | Quantidade | Número JSON > 0, com no máximo 2 casas na entrada e exatamente 2 na saída, na unidade do produto. Máximo `9999999999.99`. `Decimal` no código, `NUMERIC(12,2)` no banco. |
-| Peso | `pesoKg`: número JSON > 0 em quilos, com exatamente 3 casas na saída (RN-03). `pesoUnitarioKg` na entrada: > 0, até 3 casas, máximo `99999.999`. |
+| Peso | `pesoKg`: número JSON > 0 em quilos, com exatamente 3 casas na saída (RN-03). `pesoUnitarioKg` na entrada: > 0, até 3 casas, máximo `999999999.999`. |
 | Comparação numérica | Os testes comparam números por valor: `5000`, `5000.0` e `5000.000` são iguais. A saída do serviço segue as casas deste glossário; os exemplos do documento e do Anexo A podem omitir zeros à direita e não definem o formato. |
 | UUID | Texto no formato canônico `8-4-4-4-12` hexadecimal, qualquer versão, em qualquer caixa. Outras formas (sem hífens, com chaves) são inválidas. |
 | Texto aparado | Resultado de `str.strip()` (remove todo espaço em branco Unicode das pontas). Campos obrigatórios aparados e vazios são inválidos. |
 | Opcional | Campo opcional ausente e campo opcional com `null` são equivalentes, em todo o documento. |
-| Local | Objeto `{"cidade": texto aparado de 1 a 120 caracteres, "uf": uma das 27 siglas brasileiras em maiúsculas}`. |
+| Local | Objeto `{"cidade": texto aparado de 1 a 255 caracteres, "uf": uma das 27 siglas brasileiras em maiúsculas}`. |
 | Empresa | Valor do claim `tenant_id` do token. É a identidade usada em `compradorId` e `fornecedorId`. |
 | Escopo | Valor do claim `active_scope`: `BUYER`, `SUPPLIER`, `TENANT_ADMIN` ou `CARRIER`. |
 | Suporte | Token com `platform_role = "PLATFORM_ADMIN"`. Consulta qualquer pedido; não altera pedidos (RN-17). |
@@ -117,7 +117,7 @@ Passos do fluxo: (1) o Fornecimento publica as ofertas; (2–5) Demanda, Mercado
 | Ponto de entrada (execução) | `uvicorn app.main:criar_app_real --factory --host 0.0.0.0 --port 8107`: monta os adaptadores reais a partir das variáveis de ambiente e inicia, como tarefas de fundo, o consumidor Kafka, o publicador da outbox e o reconciliador (`reconciliar` a cada 60 s). |
 | Formato de data/hora | Instante e Data (§4). |
 | Formato monetário | Valor monetário (§4). Arredondamento `ROUND_HALF_UP` só onde a regra manda (RN-03, RN-04). |
-| Configuração de infraestrutura | `DATABASE_URL` (role `svc_pedidos`), `MIGRATION_DATABASE_URL` (role `portal_ddl`; o `migracoes/env.py` força o driver `postgresql+psycopg`), `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_GROUP_ID` (`pedidos-service-v1`), `JWKS_URL`, `JWT_ISSUER` (`identity-service`), `JWT_AUDIENCE` (`b2b-platform`), `LOG_LEVEL` (`INFO`). Todas em `.env.example`. |
+| Configuração de infraestrutura | `DATABASE_URL` (role `svc_pedidos`), `MIGRATION_DATABASE_URL` (role `portal_ddl`; o `migracoes/env.py` força o driver `postgresql+psycopg`), `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_GROUP_ID` (`pedidos-service-v1`), `JWKS_URL` (`http://app1-usuarios:8080/.well-known/jwks.json` no Compose do kit; `https://identity.matheus-alves.dev/.well-known/jwks.json` no ambiente publicado), `JWT_ISSUER` (`identity-service`), `JWT_AUDIENCE` (`b2b-platform`), `LOG_LEVEL` (`INFO`). Todas em `.env.example`. Valores confirmados pelo Identity-Service (D-11). |
 
 ```text
 services/pedidos-service/
@@ -1079,7 +1079,7 @@ Campos da entidade × projeções: o detalhe (API-05) expõe o Pedido sem `preco
 
 ## 13. Premissas, decisões e questões em aberto
 
-Decisões do autor (Daniel Junio), tomadas a partir das respostas do professor, dos repositórios dos outros grupos e das discussões do grupo. A versão 2.0 foi revisada em 5 rodadas independentes do processo AED (perfil de sistemas distribuídos) e aprovada pelo autor em 2026-11-19; esta versão 2.1 só converte o formato para o ERS-LLM v1.2.
+Decisões do autor (Daniel Junio), tomadas a partir das respostas do professor, dos repositórios dos outros grupos e das discussões do grupo. A versão 2.0 foi revisada em 5 rodadas independentes do processo AED (perfil de sistemas distribuídos) e aprovada pelo autor em 2026-11-19; a versão 2.1 só converteu o formato para o ERS-LLM v1.2; a 2.2 registra as respostas da Logística e do Identity-Service e alinha os limites de cidade e peso com Fornecimento e Produtos (D-10 a D-12, PR-03).
 
 **Regras do professor citadas**
 
@@ -1097,15 +1097,19 @@ Decisões do autor (Daniel Junio), tomadas a partir das respostas do professor, 
 |---|---|---|---|
 | D-01 | Decisão | Gatilho do pedido temporário | Consumir `pedido_temporario_solicitado` da ESP-NEG-001, com um pedido por oferta, `alocacoes` no fechamento e `reservaSituacao` no `pedido_atualizado`. Motivo: os lances só começam com a reserva de todos os itens confirmada; o Mercado forma o lote (`leilao_iniciado`) e a Negociação pede um pedido temporário por item e filtra o lote pela reserva (ESP-MRC-001 v0.5, DG-37 e DG-51). Pedidos não consome eventos do Mercado. |
 | D-02 | Decisão | Destino da entrega | O comprador informa pela API-07 depois da venda. Motivo: a Negociação não envia destino e o leilão não está ligado a uma demanda. ↻ Destino da demanda indicada no lance (`demandaId`, ESP-MRC-001 DG-27/DG-28) ou endereço da empresa no Identity. |
-| D-03 | Decisão | Início da cotação | A Logística cota a partir do `pedido_atualizado` `AGUARDANDO_FRETE` e ignora `pedido_criado` com `compradorId` nulo. ↻ Cotar no `VENDA_CONCLUIDA` (sem destino). |
+| D-03 | Decisão | Início da cotação | A Logística cota a partir do `pedido_atualizado` `AGUARDANDO_FRETE` e ignora `pedido_criado` com `compradorId` nulo. ↻ Cotar no `VENDA_CONCLUIDA` (sem destino). Confirmada pela Logística em 2026-11-23 (ESP-LOG-001 v1.4, D26, Q-13): os schemas dela aceitam `compradorId` e `destino` nulos, e ela junta os campos dos dois eventos, que podem chegar fora de ordem. |
 | D-04 | Decisão | API de escrita | Sem `POST` de criação e sem `PATCH` de status: quem cria é a Negociação e a venda é concluída no fechamento. A única escrita HTTP é a API-07. |
-| D-05 | Decisão | Frete indisponível depois da venda | Não cancela; o pedido aguarda nova solicitação da Logística (RN-22). Motivo: a baixa já ocorreu e o estorno está fora da v1. |
+| D-05 | Decisão | Frete indisponível depois da venda | Não cancela; o pedido aguarda nova solicitação da Logística (RN-22). Motivo: a baixa já ocorreu e o estorno está fora da v1. Confirmada pela Logística em 2026-11-23 (ESP-LOG-001 v1.4, D27, RN-36): na mesma transação do `frete_indisponivel`, ela abre uma `solicitacao_frete_criada` com `solicitacaoFreteId` novo, `tentativa` recomeçando em 1 e o campo extra `rodada`, que Pedidos aceita e ignora (§7.3). |
 | D-06 | Decisão | Conclusão da venda | No fechamento (PROF-02). Recusa a proposta da Logística de concluir em `entrega_concluida`. |
 | D-07 | Decisão | Fechamento incompatível | Vai inteiro para a DLT, sem efeito parcial; a negociação continua aberta em Pedidos até um fechamento corrigido (RN-08). |
 | D-08 | Decisão | Contrato de trabalho | Os campos do §7 são o contrato de Pedidos. Uma mudança pedida por um parceiro gera nova versão desta especificação. |
 | D-09 | Decisão | Formato do documento | Modelo ERS-LLM v1.2 do QA, em `docs/pedidos/requisitos.md`, com contratos em `docs/pedidos/contratos/`, como a ESP-MRC-001. Suíte de aceitação em memória pelas portas do §5.1; comportamentos de infraestrutura real (outbox, réplicas, banco) viraram RNFs com evidência na stack de demonstração. |
+| D-10 | Decisão | Limites de cidade e peso unitário | `cidade` com 1 a 255 caracteres e `pesoUnitarioKg` até `999999999.999`, iguais aos produtores (ESP-FRN-001, glossário "Origem"; ESP-PRD-001, glossário "Valor de peso"; issue #9 deste repositório). Motivo: com o limite menor, uma oferta ou um produto válido no produtor ia para a `pedidos.dlt` e deixava os pedidos temporários pendentes. Sem migração: origem e destino são `jsonb` e `peso_kg` é `NUMERIC(24,5)`. |
+| D-11 | Decisão | Contrato com o Identity-Service | Confirmado pelo Identity em 2026-11-23 (issue Matheus-Allvz/Identity-Service#27): `iss` `identity-service`, `aud` `b2b-platform`, RS256, JWKS nas URLs do §5; `sub`, `tenant_id` e `active_scope`; token do login antes da escolha de contexto (`view_mode` `NONE`, `tenant_id` nulo) → `403 CONTEXTO_NAO_SELECIONADO`; `CARRIER` sem acesso; `PLATFORM_ADMIN` só consulta; tolerância de 0 s. Erros continuam com `codigo` e `correlationId` (§10); o Identity mantém `code` e `correlation_id` e recomenda que clientes leiam os dois nomes. Para `CARRIER`, Pedidos responde `ACESSO_NEGADO`, não o código do Identity (`PERFIL_NAO_PERMITIDO`). O `kid` não é fixado: vem da JWKS. |
+| D-12 | Decisão | Rodadas de frete sem limite | Na v1 não há limite de rodadas de cotação: cada `frete_indisponivel` atualiza `ocorrenciaFrete` e a Logística abre a rodada seguinte (RN-22). Pedidos não publica evento de limite. Resposta à pergunta da Logística (issue ArrozbR/portal-b2b-logistica-transporte#1). |
 | PR-01 | Premissa | Execução da apresentação | Sem os serviços parceiros, os eventos de entrada são publicados por fixtures no formato do §7.3 (PROF-05). |
 | PR-02 | Premissa | Ordem entre tópicos | A Negociação só inclui em `alocacoes` pedidos que ela recebeu pelo `pedido_atualizado` com reserva `CONFIRMADA`; por isso a efetivação exige reserva confirmada (RN-08). |
+| PR-03 | Premissa | Cidades que a Logística cota | A Logística só cota cidades da tabela do Apêndice A da ESP-LOG-001 (132 cidades, todas as capitais); cidade fora dela vai para a DLT da Logística e o pedido fica em `AGUARDANDO_FRETE`. Pedidos não confere a cidade contra essa tabela (a API-07 aceita qualquer `Local`). As cidades da massa (§8.0) e do Anexo A — Rio Verde, Anápolis e Goiânia — estão na tabela. |
 
 ### 13.1 Casos de borda obrigatórios
 
@@ -1150,6 +1154,7 @@ Pré-conferência do autor antes do gate G1; o QA confirma ou desmarca cada item
 | 1.1 | 2026-11-12 | Daniel Junio | Pedido criado depois de `negociacao_fechada`, reserva por `pedido_criado` e conclusão por `PATCH` (formato AED). Primeiro fluxo implementado. |
 | 2.0 | 2026-11-19 | Daniel Junio | Pedido temporário na abertura (PROF-01), leilão conjunto, venda no fechamento, destino pelo comprador, sem `POST` e `PATCH`; decisões D-01 a D-08; 5 rodadas de revisão AED; aprovada pelo autor. |
 | 2.1 | 2026-11-19 | Daniel Junio | Conversão para o modelo ERS-LLM v1.2 do QA (D-09), como a ESP-MRC-001: portas e ponto de entrada `create_app`, 10 RFs em EARS, 39 CAs em Gherkin, 29 RNs, catálogo de erros, 11 RNFs e matriz. Comportamentos de infraestrutura real viraram RNFs. Correções da revisão independente: JWT conferido pelo `clock`; "hoje" sem base de fusos; histórico de seleções (`selecoes`); ordem da RN-21; valores-padrão e substituição de P1–P3 na massa; Anexo A com os payloads de todos os tópicos; regras de repetição, DLT, idempotência e formatos. Segunda rodada: `compradorId` do topo do fechamento (RN-09); tokens da massa com `sub`, `tenant_id` e `active_scope`; corpos e quantidades explícitos no CA-21 e no CA-35; 500 por middleware; filtro em `listar_pendentes`. Revisão do mesmo dia: referência à ESP-MRC-001 v0.5 e motivo da D-01 alinhados ao fluxo combinado com Mercado e Negociação, sem mudança de regra ou contrato. |
+| 2.2 | 2026-11-23 | Daniel Junio | Respostas dos parceiros: Logística confirma D-03 e D-05 (ESP-LOG-001 v1.4) e pergunta o limite de rodadas (D-12, sem limite); Identity-Service confirma `iss`, `aud`, JWKS, claims, `view_mode`, suporte só leitura, tolerância 0 s e o formato de erro (D-11, URLs no §5). Cidade com até 255 caracteres e `pesoUnitarioKg` até `999999999.999`, como Fornecimento e Produtos (D-10, issue #9). Premissa PR-03 sobre a tabela de cidades da Logística. Sem mudança de regra, estado ou evento. |
 
 ## Anexo A — Exemplos de payload por tópico
 

@@ -27,7 +27,7 @@ PesoUnitario = Annotated[Decimal, BeforeValidator(numero_json), Field(gt=0, max_
 
 
 class Local(BaseModel):
-    cidade: Annotated[str, Field(strict=True, min_length=1, max_length=120, pattern=r"\S")]
+    cidade: Annotated[str, Field(strict=True, min_length=1, max_length=255, pattern=r"\S")]
     uf: UF
 
 

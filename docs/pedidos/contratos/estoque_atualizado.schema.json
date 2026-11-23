@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/pedidos/contratos/estoque_atualizado.schema.json",
   "title": "estoque_atualizado",
-  "description": "Consumido pelo pedidos-service (ESP-PED-001 v2.1, §7.3). Campos adicionais do produtor são aceitos e ignorados. Chave Kafka e aggregateId: fornecimentoId.",
+  "description": "Consumido pelo pedidos-service (ESP-PED-001 v2.2, §7.3). Campos adicionais do produtor são aceitos e ignorados. Chave Kafka e aggregateId: fornecimentoId.",
   "type": "object",
   "required": [
     "eventId",

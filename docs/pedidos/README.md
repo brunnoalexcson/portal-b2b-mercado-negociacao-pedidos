@@ -8,9 +8,9 @@ O serviço registra o pedido que bloqueia o estoque de uma oferta durante a nego
 
 | Item | Situação |
 |---|---|
-| Especificação (ESP-PED-001 v2.1) | No modelo **ERS-LLM v1.2 do QA**, como a ESP-MRC-001: 10 RFs, 39 critérios de aceitação em Gherkin, 29 regras, 11 RNFs. Conteúdo aprovado em 19/11 (v2.0, processo AED, 5 rodadas de revisão independente). Pronta para o gate G1. |
+| Especificação (ESP-PED-001 v2.2) | No modelo **ERS-LLM v1.2 do QA**, como a ESP-MRC-001: 10 RFs, 39 critérios de aceitação em Gherkin, 29 regras, 11 RNFs. Conteúdo aprovado em 19/11 (v2.0, processo AED, 5 rodadas de revisão independente). Pronta para o gate G1. |
 | Contratos de eventos | Schemas JSON 2020-12 e exemplos validados para os 14 tópicos consumidos e publicados. Compatíveis com os contratos da Negociação (`926dfb8`), do Mercado (`5c8e8a2`) e do Fornecimento (`56da541`). |
-| Código (`services/pedidos-service/`) | Primeiro fluxo (v1.1) implementado e testado. Falta adaptar ao pedido temporário da v2.1. |
+| Código (`services/pedidos-service/`) | Primeiro fluxo (v1.1) implementado e testado. Falta adaptar ao pedido temporário da v2.2. |
 | Alinhamento com Negociação e Mercado | Fluxo combinado em 19/11 (ver abaixo), registrado na ESP-MRC-001 v0.5. |
 
 ## Documentos
@@ -64,11 +64,11 @@ Pedidos não consome eventos do Mercado. O pedido temporário nasce sem comprado
 
 | Grupo | Pendência |
 |---|---|
-| **Logística (crítico)** | Ignorar `pedido_criado` sem comprador, cotar no `AGUARDANDO_FRETE`, não concluir a venda na entrega, não cancelar em `frete_indisponivel` e reabrir a cotação. Sem isso, a Logística cotaria pedidos temporários. |
+| Logística | **Resolvida em 23/11** ([issue #1 da Logística](https://github.com/ArrozbR/portal-b2b-logistica-transporte/issues/1), ESP-LOG-001 v1.4): ignora `pedido_criado` sem comprador, cota no `AGUARDANDO_FRETE`, não conclui a venda na entrega e reabre a cotação em `frete_indisponivel`. Sem limite de rodadas na v1 (D-12). A Logística só cota cidades da tabela dela (PR-03). |
 | Negociação | Validar os contratos de `pedido_temporario_solicitado`, `negociacao_fechada` e `pedido_atualizado` e republicar o fechamento corrigido em caso de `FECHAMENTO_INCOMPATIVEL`. |
-| Fornecimento | Resposta na issue #1 e deduplicação da baixa |
+| Fornecimento | Resposta na issue #1 e deduplicação da baixa. Limites de cidade (255) e peso unitário (`999999999.999`) já alinhados (D-10, issue #9). |
 | Infra | Tópicos novos, consumidores no `CONTRACTS.md` e rota no gateway |
-| Autenticação | `iss` e `aud` reais, `PLATFORM_ADMIN` e formato de erro |
+| Autenticação | **Resolvida em 23/11** ([issue #27 do Identity](https://github.com/Matheus-Allvz/Identity-Service/issues/27)): `iss`, `aud`, URLs da JWKS, claims, `view_mode`, `PLATFORM_ADMIN` só leitura, tolerância 0 s; erro continua com `codigo` (D-11). |
 | Banco de Dados | DDL do schema `pedidos` e quantidade decimal |
 | UX/UI | Tela de destino do comprador |
 | Professor | Nota fiscal e cancelamento manual fora da v1 |
