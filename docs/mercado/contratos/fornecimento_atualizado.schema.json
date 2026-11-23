@@ -60,17 +60,17 @@
         "fornecimentoId": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 128
+          "maxLength": 64
         },
         "fornecedorId": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 128
+          "maxLength": 64
         },
         "produtoId": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 128
+          "maxLength": 64
         },
         "unidade": {
           "enum": [

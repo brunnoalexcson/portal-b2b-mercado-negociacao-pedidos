@@ -5,11 +5,11 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-MRC-001 |
-| Versão | 0.5 |
+| Versão | 0.6 |
 | Status | Rascunho |
 | Serviço / Bounded context | `mercado-service` (microsserviço 5 do Portal B2B Distribuído): Mercado / Matching Engine. Porta `8105`, rotas `/api/v1/mercado`, schema PostgreSQL `mercado`, role `svc_mercado` |
 | Autores (PO / Dev / QA) | PO e Dev: Brunno Alexcson (grupo Mercado, Negociação/Leilão e Pedidos). QA: Grupo de Teste e Qualidade (revisão no gate G1) |
-| Data | 2026-11-19 |
+| Data | 2026-11-22 |
 | Documentos relacionados | Diagrama "Arquitetura do Portal B2B Distribuído" (bloco 5); ESP-PED-001 v2.1 (`docs/pedidos/requisitos.md`); ESP-NEG-001 (`docs/especificacoes/ESP-NEG-001_Negociacao.md`, branch `docs/esp-negociacao`); contratos de eventos em `docs/mercado/contratos/`; kit de Infraestrutura (`CONTRACTS.md`, `ORIENTACOES-ARQUITETURA-GRUPOS.md`); contrato de eventos v2.3 do Fornecimento; contratos do grupo de Compra e Demanda (`comum/contratos/`); Identity-Service; modelo ERS-LLM v1.2 do QA |
 
 ## 1. Diretivas para a LLM geradora
@@ -274,7 +274,7 @@ Comportamento dos adaptadores reais (não usados pela suíte de aceitação em m
 #### Produto (tabela `mercado.produto`, chave `produtoId`)
 | Atributo | Tipo | Obrigatório | Restrições / origem |
 |---|---|---|---|
-| produtoId | string | Sim | Do evento; 1 a 128 caracteres. |
+| produtoId | string | Sim | Do evento; 1 a 64 caracteres (DG-55). |
 | nome | string | Sim | Do evento; não vazio. |
 | unidade | enum | Sim | `KG`, `TON`, `UN`, `CX`, `L`; do evento. |
 | atualizadoEm | instante | Sim | `cadastradoEm` ou `atualizadoEm` do evento aplicado (RN-02). |
@@ -282,8 +282,8 @@ Comportamento dos adaptadores reais (não usados pela suíte de aceitação em m
 #### Oferta (tabela `mercado.oferta`, chave `fornecimentoId`)
 | Atributo | Tipo | Obrigatório | Restrições / origem |
 |---|---|---|---|
-| fornecimentoId | string | Sim | Do evento; 1 a 128 caracteres. |
-| fornecedorId | string | Sim | Do evento. |
+| fornecimentoId | string | Sim | Do evento; 1 a 64 caracteres (DG-55). |
+| fornecedorId | string | Sim | Do evento; 1 a 64 caracteres (DG-55). |
 | produtoId | string | Sim | Do evento. |
 | unidade | enum | Sim | Do evento; igual à do produto (RN-03). |
 | preco | valor monetário | Sim | ≥ 0; do evento. |
@@ -295,9 +295,9 @@ Comportamento dos adaptadores reais (não usados pela suíte de aceitação em m
 #### Demanda (tabela `mercado.demanda`, chave `demandaId`)
 | Atributo | Tipo | Obrigatório | Restrições / origem |
 |---|---|---|---|
-| demandaId | string | Sim | `demandaId` da demanda única ou `ocorrenciaId` da ocorrência. |
+| demandaId | string | Sim | `demandaId` da demanda única ou `ocorrenciaId` da ocorrência; 1 a 64 caracteres (DG-55). |
 | demandaOrigemId | string ou `null` | Sim | `null` na única; `demandaId` do evento na ocorrência. |
-| compradorId | string | Sim | Do evento. |
+| compradorId | string | Sim | Do evento; 1 a 64 caracteres (DG-55). |
 | produtoId | string | Sim | Do evento. |
 | unidade | enum | Sim | Do evento. |
 | quantidade | quantidade | Sim | > 0; do evento. |
@@ -415,7 +415,7 @@ Claims ignorados na v1: `platform_role`, `roles`, `permissions`, `group_id`, `al
 
 ### 7.2 API REST
 
-Todas as respostas de negócio são JSON com nomes de campo em camelCase. O FastAPI não pode validar o corpo antes das verificações 1 a 4 do §10: o corpo é lido com `await request.body()` e validado pelo próprio serviço. `negociacaoId` e `sugestaoId` na URL são UUID; `produtoId`, `demandaId` e `fornecimentoId` na URL ou no corpo são texto de 1 a 128 caracteres de `[A-Za-z0-9._-]`; outro formato → `422 VALIDACAO_INVALIDA`. Corpos com campos fora do contrato, campos ausentes, tipos errados (inclusive número enviado como string ou booleano), quantidade ≤ 0 ou com mais de 2 casas, ou JSON malformado → `422 VALIDACAO_INVALIDA`. Listagens: `page` inteiro ≥ 1 (padrão 1) e `size` inteiro de 1 a 100 (padrão 10); fora disso → `422 VALIDACAO_INVALIDA`; resposta `{"items": [...], "page": P, "size": S, "total": T}`, com `items: []` numa página vazia.
+Todas as respostas de negócio são JSON com nomes de campo em camelCase. O FastAPI não pode validar o corpo antes das verificações 1 a 4 do §10: o corpo é lido com `await request.body()` e validado pelo próprio serviço. `negociacaoId` e `sugestaoId` na URL são UUID; `produtoId`, `demandaId` e `fornecimentoId` na URL ou no corpo são texto de 1 a 64 caracteres de `[A-Za-z0-9._-]`; outro formato → `422 VALIDACAO_INVALIDA`. Corpos com campos fora do contrato, campos ausentes, tipos errados (inclusive número enviado como string ou booleano), quantidade ≤ 0 ou com mais de 2 casas, ou JSON malformado → `422 VALIDACAO_INVALIDA`. Listagens: `page` inteiro ≥ 1 (padrão 1) e `size` inteiro de 1 a 100 (padrão 10); fora disso → `422 VALIDACAO_INVALIDA`; resposta `{"items": [...], "page": P, "size": S, "total": T}`, com `items: []` numa página vazia.
 
 | ID | Método | Rota | Escopos | Sucesso | Erros possíveis (na ordem de verificação) |
 |---|---|---|---|---|---|
@@ -626,7 +626,7 @@ Envelope (kit, `CONTRACTS.md`): `eventId`, `eventType` (igual ao tópico), `even
 | `demanda_cancelada` | `demanda-service` | `demandaId` | RF-04 | `mercado.dlt` (RN-32) |
 | `negociacao_fechada` | `negociacao-service` | `negociacaoId` | RF-11 | `mercado.dlt` (RN-32) |
 
-Validação comum (falha → inválida): mensagem não é objeto; falta algum dos oito campos do envelope; `eventId` não é string não vazia; `eventType` diferente do tópico; `eventVersion` diferente de `"1.0"`; `source` diferente do produtor da tabela; `correlationId` fora de 1–128 caracteres de `[A-Za-z0-9._-]`; `timestamp` não é instante com fuso; `payload` não é objeto; campo obrigatório do payload ausente, com tipo errado ou fora do domínio do schema; string obrigatória vazia ou só com espaços; quantidade ou valor com mais de 2 casas. Validação de unidade na RN-03. Campos adicionais do Fornecimento, como `grupoId` no `fornecimento_criado`, são aceitos e ignorados (DG-54).
+Validação comum (falha → inválida): mensagem não é objeto; falta algum dos oito campos do envelope; `eventId` não é string não vazia; `eventType` diferente do tópico; `eventVersion` diferente de `"1.0"`; `source` diferente do produtor da tabela; `correlationId` fora de 1–128 caracteres de `[A-Za-z0-9._-]`; `timestamp` não é instante com fuso; `payload` não é objeto; campo obrigatório do payload ausente, com tipo errado ou fora do domínio do schema; string obrigatória vazia ou só com espaços; quantidade ou valor com mais de 2 casas. Validação de unidade na RN-03. `produtoId`, `fornecimentoId`, `fornecedorId`, `compradorId`, `demandaId` e `ocorrenciaId` são texto de 1 a 64 caracteres; maior → inválida (DG-55). Campos adicionais do Fornecimento, como `grupoId` no `fornecimento_criado`, são aceitos e ignorados (DG-54).
 
 `produto_cadastrado`. Obrigatórios: `produtoId`, `nome`, `unidade`, `cadastradoEm`. `produto_atualizado`: os mesmos, com `atualizadoEm` no lugar de `cadastradoEm`.
 
@@ -1888,6 +1888,7 @@ Decisões do autor (Brunno Alexcson), tomadas a partir das respostas do professo
 | DG-52 | Decisão | Abertura da direta | O Mercado valida aptidão e saldo da demanda e publica `modo_negociacao_definido`; a Negociação abre a direta com o mesmo `negociacaoId` e publica `pedido_temporario_solicitado`, como no leilão. O pedido nasce sem comprador e o destino vem depois (DG-28). ↻ O comprador abre a direta na Negociação por HTTP (D16 da ESP-NEG-001). Status Report: sim. |
 | DG-53 | Decisão | Fechamento republicado | Só o primeiro `negociacao_fechada` de cada `negociacaoId` é aplicado. Se o Pedidos mandar o fechamento para a DLT e a Negociação republicar corrigido com outro `eventId`, o Mercado ignora a correção (RN-25); é um caso de erro raro, aceito na v1. ↻ Reprocessar o fechamento quando as quantidades mudarem, desfazendo o abatimento anterior (exige guardar o abatido por demanda). Status Report: não. |
 | DG-54 | Decisão | Auto-negociação por grupo econômico | Na v1 o conflito de interesse compara só a empresa (`tenant_id`, RN-14, RN-28); o `grupoId` que o Fornecimento passou a enviar no `fornecimento_criado` (issue #35) é aceito e ignorado. ↻ Comparar o `group_id` do token com o `grupoId` da oferta (exige guardar o `grupoId` na cópia da oferta). Status Report: opcional. |
+| DG-55 | Decisão | Tamanho dos IDs de negócio | `produtoId`, `fornecimentoId`, `fornecedorId`, `compradorId`, `demandaId` e `ocorrenciaId` têm de 1 a 64 caracteres, na API, nos eventos consumidos e nos publicados, como na Negociação, no Pedidos, no Fornecimento e no kit da Infra (`database/01-init.sql`, `VARCHAR(64)`). Evento consumido com ID maior vai para `mercado.dlt`. O envelope (`correlationId`, `aggregateId`) continua com até 128. Fecha a INT-NEG-12 da ESP-NEG-001. ↻ Aceitar até 128 exigiria alterar as colunas de ID da Negociação e do Pedidos. |
 | PR-01 | Premissa | Intervalo entre T1 e a reserva | Em T1 a separação local é liberada; até chegar o `estoque_atualizado` da reserva do pedido temporário, a quantidade do lote volta a contar como disponível livre. Uma direta aberta nesse intervalo pode tomar o estoque; nesse caso a reserva do item é recusada e a Negociação o retira do lote antes do primeiro lance (DG-51). Nenhuma venda acontece sem reserva; o efeito possível é um lote menor que o aceito. |
 | PR-02 | Premissa | Fim do leilão | Este serviço não acompanha T2; a negociação só muda com o `negociacao_fechada`. |
 | PR-03 | Premissa | Ordem entre tópicos | Demanda ou oferta podem chegar antes do produto; o balanço usa o `produtoId` e a unidade do evento até o produto chegar (RN-03). |
@@ -1965,3 +1966,4 @@ Pré-conferência do autor antes do gate G1; o QA confirma ou desmarca cada item
 | 0.3 | 2026-11-18 | Brunno Alexcson | Reescrita no modelo ERS-LLM v1.2 do QA (DG-36); decisões DG-01 a DG-35; negociação direta pedida pelo comprador com saldo e atendimento parcial; leilão compartilhado formado pela sugestão; contratos e schemas em `docs/mercado/contratos/`; divergências com a ESP-NEG-001 na INT-MRC-01; dúvidas não decididas no §13.2. |
 | 0.4 | 2026-11-18 | Brunno Alexcson | Decisões DG-37 a DG-50: propostas ao Pedidos para o pedido temporário; contratos de eventos fechados do lado do Mercado; prazo vencido tira a demanda do balanço sem expirá-la (RN-10, RF-12; sai a situação `EXPIRADA`); vitrine e balanço públicos com totais; INT-MRC-02 e INT-MRC-04 atualizadas; §13.2 revisada. |
 | 0.5 | 2026-11-19 | Brunno Alexcson | Decisões DG-51 a DG-54, alinhadas com Pedidos e Negociação e com o diagrama: o Mercado continua formando o lote e publicando `leilao_iniciado`; a Negociação pede o pedido temporário de cada oferta com `pedido_temporario_solicitado`, na direta e no leilão, e só libera os lances com as reservas confirmadas (DG-51, DG-52); fechamento republicado é ignorado (DG-53); `grupoId` ignorado na v1 (DG-54); `tipo` e `produtoId` obrigatórios no `negociacao_fechada`; PR-01 reescrita; DG-28 e DG-37 a DG-39 revistas; INT-MRC-01 a INT-MRC-03 e INT-MRC-05 atualizadas (INT-MRC-02 fechada); RNF-06 corrigido; histórico em ordem. |
+| 0.6 | 2026-11-22 | Brunno Alexcson | DG-55: IDs de negócio (`produtoId`, `fornecimentoId`, `fornecedorId`, `compradorId`, `demandaId`, `ocorrenciaId`) limitados a 64 caracteres na API, no consumo e nos schemas de `docs/mercado/contratos/`, alinhado com a Negociação e o Pedidos (INT-NEG-12). |

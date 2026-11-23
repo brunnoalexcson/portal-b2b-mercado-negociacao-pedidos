@@ -72,7 +72,7 @@
         "produtoId": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 128
+          "maxLength": 64
         },
         "unidade": {
           "enum": [
@@ -110,7 +110,7 @@
               "demandaId": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 128
+                "maxLength": 64
               },
               "demandaOrigemId": {
                 "type": [
@@ -121,7 +121,7 @@
               "compradorId": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 128
+                "maxLength": 64
               },
               "quantidade": {
                 "type": "number",
@@ -182,12 +182,12 @@
               "fornecimentoId": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 128
+                "maxLength": 64
               },
               "fornecedorId": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 128
+                "maxLength": 64
               },
               "quantidade": {
                 "type": "number",
