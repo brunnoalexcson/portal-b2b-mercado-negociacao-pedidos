@@ -5,11 +5,11 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-MRC-001 |
-| Versão | 0.6 |
+| Versão | 0.7 |
 | Status | Rascunho |
 | Serviço / Bounded context | `mercado-service` (microsserviço 5 do Portal B2B Distribuído): Mercado / Matching Engine. Porta `8105`, rotas `/api/v1/mercado`, schema PostgreSQL `mercado`, role `svc_mercado` |
 | Autores (PO / Dev / QA) | PO e Dev: Brunno Alexcson (grupo Mercado, Negociação/Leilão e Pedidos). QA: Grupo de Teste e Qualidade (revisão no gate G1) |
-| Data | 2026-11-22 |
+| Data | 2026-11-25 |
 | Documentos relacionados | Diagrama "Arquitetura do Portal B2B Distribuído" (bloco 5); ESP-PED-001 v2.2 (`docs/pedidos/requisitos.md`); ESP-NEG-001 v1.2 (`docs/negociacao/requisitos.md`); contratos de eventos em `docs/mercado/contratos/`; kit de Infraestrutura (`CONTRACTS.md`, `ORIENTACOES-ARQUITETURA-GRUPOS.md`); contrato de eventos v2.5 do Fornecimento; contratos do grupo de Compra e Demanda (`comum/contratos/`); Identity-Service; modelo ERS-LLM v1.2 do QA |
 
 ## 1. Diretivas para a LLM geradora
@@ -17,10 +17,10 @@
 1. Implemente **exatamente** o que está especificado. Não adicione endpoints, campos, tópicos, perfis ou regras que não estejam neste documento.
 2. **Ordem de precedência** quando houver conflito aparente: Catálogo de erros (§10) e Contratos (§7) > Critérios de aceitação (§8) > Regras de negócio (§9) > Requisitos funcionais (§8) > texto descritivo.
 3. Nomes de campos, tópicos, códigos de erro, rotas e valores de enumeração são **literais**: use-os byte a byte, com a mesma grafia e caixa.
-4. Quando algo não estiver definido, escolha o comportamento mais simples que **não viole** nenhum item deste documento e registre a decisão em um comentário `# DECISÃO:` no código.
+4. Quando algo não estiver definido, estiver ambíguo ou parecer contraditório, **não suponha nem invente** o comportamento: pare e faça as perguntas no chat antes de prosseguir com a implementação, indicando o trecho deste documento e as opções que você vê, e espere a resposta.
 5. Entregue código completo e executável. Proibido: `TODO`, `pass` como implementação, pseudocódigo, trechos omitidos ("...").
 6. Grave todos os arquivos completos na estrutura do §5, dentro de `services/mercado-service/`. Na resposta final, liste seus caminhos relativos.
-7. A implementação espelha a estrutura de `services/pedidos-service/` do mesmo repositório: domínio (`app/dominio.py`), contratos de entrada e saída (`app/contratos.py`), HTTP (`app/http.py`), ponto de entrada (`app/main.py`), adaptadores `app/adaptadores/postgres.py`, `app/adaptadores/kafka.py` e `app/adaptadores/jwks.py`, e migrações Alembic em `migracoes/`. Os arquivos de `services/pedidos-service/`, `docs/pedidos/` e `docs/negociacao/` são somente leitura.
+7. A implementação espelha a estrutura de `services/pedidos-service/` do mesmo repositório: domínio (`app/dominio.py`), contratos de entrada e saída (`app/contratos.py`), HTTP (`app/http.py`), ponto de entrada (`app/main.py`), adaptadores `app/adaptadores/postgres.py`, `app/adaptadores/kafka.py` e `app/adaptadores/jwks.py`, e migrações Alembic em `migracoes/`. Espelha as pastas e os módulos; os pontos de entrada (`create_app`, `executar_prazos`, `criar_app_real`) e as portas de `app/portas.py` seguem o §5, porque o código atual do Pedidos é o primeiro fluxo, anterior à ESP-PED-001 v2.1, e ainda cria o `app` no módulo. Os arquivos de `services/pedidos-service/`, `docs/pedidos/` e `docs/negociacao/` são somente leitura.
 
 ## 2. Contexto
 
@@ -126,7 +126,7 @@ Passos do fluxo principal: (1) o Fornecimento publica as ofertas; (2) o comprado
 |---|---|
 | Linguagem / versão | Python 3.12 |
 | Framework | FastAPI com Pydantic 2 e Uvicorn |
-| Dependências permitidas | As versões fixadas em `services/pedidos-service/requirements.txt`: `fastapi==0.162.5`, `starlette==1.10.0`, `uvicorn==0.54.0`, `pydantic==2.14.3`, `psycopg[binary]==3.3.9`, `psycopg-pool==3.3.3`, `alembic==1.20.1`, `SQLAlchemy==2.1.8`, `aiokafka==0.15.0`, `PyJWT[crypto]==2.15.1`, `cryptography==50.0.2`, `simplejson==3.20.2`, `prometheus-client==0.26.0`, além da biblioteca padrão. Nenhuma outra. Os módulos fora de `app/adaptadores/` e `migracoes/` importam somente biblioteca padrão, `fastapi`, `starlette`, `pydantic`, `jwt`, `cryptography`, `simplejson`, `prometheus_client` e o próprio pacote `app`. |
+| Dependências permitidas | As versões fixadas em `services/pedidos-service/requirements.txt`: `fastapi==0.162.5`, `starlette==1.10.0`, `uvicorn==0.54.0`, `pydantic==2.14.3`, `psycopg[binary]==3.3.9`, `psycopg-pool==3.3.3`, `alembic==1.20.1`, `SQLAlchemy==2.1.8`, `aiokafka==0.15.0`, `PyJWT[crypto]==2.15.1`, `cryptography==50.0.2`, `simplejson==3.20.2`, `prometheus-client==0.26.0`, além da biblioteca padrão. Nenhuma outra. Testes: `httpx==0.28.1` e `pytest==9.2.0` em `requirements-test.txt`, instalados só na etapa `test` da imagem. Os módulos de `app/` fora de `app/adaptadores/` importam somente biblioteca padrão, `fastapi`, `starlette`, `pydantic`, `jwt`, `cryptography`, `simplejson`, `prometheus_client` e o próprio pacote `app`. |
 | Persistência | Somente pela porta `MercadoRepositorio` (§5.1). Proibido guardar produtos, ofertas, demandas, sugestões, aceites, negociações, chaves de idempotência ou eventos processados em variáveis de módulo ou da aplicação. |
 | Estrutura de arquivos | Ver árvore abaixo. `app/__init__.py`, `app/portas.py` e `app/main.py` são obrigatórios. |
 | Ponto de entrada (testes) | `app.main.create_app(event_bus: EventBus, clock: Clock, repositorio: MercadoRepositorio, chaves_publicas: ChavesPublicas, config: ConfigMercado = ConfigMercado(), emissor: str = "identity-service", audiencia: str = "b2b-platform") -> fastapi.FastAPI` e `app.main.executar_prazos(app: fastapi.FastAPI) -> int` (processa janelas de adesão vencidas e demandas cujo prazo venceu em `clock.now()` e devolve quantos registros mudaram). |
@@ -134,7 +134,7 @@ Passos do fluxo principal: (1) o Fornecimento publica as ofertas; (2) o comprado
 | Formato de data/hora | Instante (§4). |
 | Formato monetário | Valor monetário (§4). Arredondamento sempre explícito, conforme RN-22 e RN-23. |
 | Configuração de negócio | `ConfigMercado` (dataclass imutável em `app/portas.py`) com `excesso_demanda_minimo_percentual: Decimal = Decimal("0")`, `leilao_janela_adesao_minutos: int = 60`, `leilao_duracao_horas: int = 24`, `leilao_incremento_minimo_percentual: Decimal = Decimal("1")`. Na execução, lidos de `EXCESSO_DEMANDA_MINIMO_PERCENTUAL`, `LEILAO_JANELA_ADESAO_MINUTOS`, `LEILAO_DURACAO_HORAS` e `LEILAO_INCREMENTO_MINIMO_PERCENTUAL`. Valores inválidos (negativos, janela ou duração < 1) impedem a subida do serviço. |
-| Configuração de infraestrutura | `DATABASE_URL` (role `svc_mercado`), `MIGRATION_DATABASE_URL` (role `portal_ddl`), `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_GROUP_ID` (`mercado-service-v1`), `JWKS_URL` (`https://identity.matheus-alves.dev/.well-known/jwks.json` por padrão), `JWT_ISSUER` (`identity-service`), `JWT_AUDIENCE` (`b2b-platform`), `APP_PORT` (`8105`), `LOG_LEVEL` (`INFO`). Todas documentadas em `.env.example`. |
+| Configuração de infraestrutura | `DATABASE_URL` (role `svc_mercado`), `MIGRATION_DATABASE_URL` (role `portal_ddl`), `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_GROUP_ID` (`mercado-service-v1`), `JWKS_URL` (`https://identity.matheus-alves.dev/.well-known/jwks.json` por padrão), `JWT_ISSUER` (`identity-service`), `JWT_AUDIENCE` (`b2b-platform`), `LOG_LEVEL` (`INFO`). A porta é fixa no ponto de entrada (8105, a do kit). Todas documentadas em `.env.example`. **Execução no kit:** O `docker-compose.yml` do kit sobe `app1-mercado` e `app2-mercado` a partir do serviço de exemplo do kit, com `SERVICE_NAME`, `PORT`, `INSTANCE`, `DB_HOST` e `KAFKA_BOOTSTRAP_SERVERS`, que este serviço não usa. O `compose.mercado.yml` é aplicado por cima do Compose do kit (`docker compose -f docker-compose.yml -f <projeto>/services/mercado-service/compose.mercado.yml up -d`), como o `compose.pedidos.yml` do Pedidos: troca o build de `app1-mercado` e `app2-mercado` por este projeto (`MERCADO_PROJECT_DIR`, obrigatório), passa as variáveis acima (`KAFKA_BOOTSTRAP_SERVERS` com padrão `rp-0:9092,rp-1:9092,rp-2:9092`) e acrescenta `mercado-migrate`, que roda `python -m alembic upgrade head` com `MIGRATION_DATABASE_URL`; as duas réplicas só sobem depois que `mercado-migrate` termina com sucesso. Tudo na rede `portal-net` do kit. No kit, `JWKS_URL` é `http://gateway:8080/.well-known/jwks.json` (o gateway repassa ao serviço de usuários), como no Fornecimento e na resposta do Identity (INT-MRC-07). |
 
 ```text
 services/mercado-service/
@@ -153,12 +153,17 @@ services/mercado-service/
 ├── migracoes/
 │   ├── env.py
 │   └── versions/0001_mercado.py
+├── tests/                   # suíte de aceitação (§8) com dublês das portas, testes do fluxo real no compose.demo.yml e demo_identity.py (emissor de tokens de teste)
+├── demo/                    # init.sql (roles svc_mercado e portal_ddl, schema mercado) e nginx.conf (gateway da demonstração)
 ├── alembic.ini
 ├── requirements.txt
+├── requirements-test.txt    # httpx e pytest, só na etapa test da imagem
 ├── .env.example
-├── Dockerfile
-├── compose.demo.yml
-├── compose.mercado.yml
+├── .dockerignore            # lista do que entra no build: requirements, app/, tests/, migracoes/, alembic.ini e Dockerfile
+├── .gitignore               # .env, .venv/, __pycache__/, .pytest_cache/
+├── Dockerfile               # python:3.12-slim em três etapas (deps, test, runtime), usuário 65532, EXPOSE 8105
+├── compose.demo.yml         # demonstração local, fora do kit
+├── compose.mercado.yml      # override do Compose do kit: app1-mercado, app2-mercado e mercado-migrate
 └── README.md
 ```
 
@@ -213,11 +218,15 @@ class MercadoRepositorio(Protocol):
     def listar_ofertas_do_produto(self, produto_id: str) -> list[dict]: ...
     def obter_demanda(self, demanda_id: str, bloquear: bool = False) -> dict | None: ...
     def salvar_demanda(self, demanda: dict) -> None: ...
+    def obter_modelo(self, demanda_id: str) -> dict | None: ...
+    def salvar_modelo(self, modelo: dict) -> None: ...
     def listar_demandas_abertas(self, produto_id: str) -> list[dict]: ...
     def listar_demandas_por_origem(self, demanda_origem_id: str) -> list[dict]: ...
     def listar_demandas_vencidas(self, agora: datetime, limite: int) -> list[str]: ...
     # produto como unidade de concorrência
     def bloquear_produto(self, produto_id: str) -> None: ...
+    def obter_situacao_balanco(self, produto_id: str) -> dict | None: ...
+    def salvar_situacao_balanco(self, produto_id: str, situacao: str, situacao_desde: datetime) -> None: ...
     # sugestões e aceites
     def obter_sugestao(self, sugestao_id: str, bloquear: bool = False) -> dict | None: ...
     def obter_sugestao_ativa(self, produto_id: str) -> dict | None: ...
@@ -243,29 +252,33 @@ class MercadoRepositorio(Protocol):
 Comportamento das portas:
 
 - `app/portas.py` contém exatamente as definições acima. Quem chama `create_app` fornece as implementações; nos testes, dublês em memória.
-- `create_app` chama, durante a criação da aplicação, `event_bus.subscribe` para os tópicos `produto_cadastrado`, `produto_atualizado`, `fornecimento_criado`, `fornecimento_atualizado`, `estoque_atualizado`, `demanda_criada`, `demanda_recorrente_gerada`, `demanda_cancelada` e `negociacao_fechada`, um handler para cada. O handler recebe a mensagem completa (envelope, §7.3) como `dict` e **nunca** propaga exceção.
+- `create_app` chama, durante a criação da aplicação, `event_bus.subscribe` para os tópicos `produto_cadastrado`, `produto_atualizado`, `fornecimento_criado`, `fornecimento_atualizado`, `estoque_atualizado`, `demanda_criada`, `demanda_recorrente_gerada`, `demanda_cancelada` e `negociacao_fechada`, um handler para cada. O handler recebe a mensagem completa (envelope, §7.3) como `dict`. Ele só propaga `RepositorioIndisponivel` (RN-31); qualquer outra exceção é tratada dentro dele.
 - `transacao()`: tudo o que é feito no repositório dentro de `with repositorio.transacao():` é gravado de forma atômica; se uma exceção sair do bloco, nada é gravado. Cada requisição HTTP de escrita, cada mensagem consumida e cada registro processado por `executar_prazos` usam uma única transação.
 - `bloquear_produto(produto_id)` bloqueia o produto até o fim da transação (no PostgreSQL, `SELECT ... FOR UPDATE` numa linha por produto, criada se não existir). **Toda** escrita que muda ofertas, demandas, aceites, sugestões ou negociações de um produto chama `bloquear_produto` antes de validar regras e recalcular o balanço. É isso que serializa o balanço e a sugestão de um produto entre as duas réplicas.
 - Os dicionários trocados com o repositório usam as chaves dos atributos do §6.1, com instantes em `datetime` UTC e valores em `Decimal`.
-- `listar_ofertas_do_produto` devolve todas as ofertas do produto, em qualquer situação. `listar_demandas_abertas` devolve as demandas com `situacao = "AGUARDANDO"` do produto, em ordem de `recebidaEm` crescente e, em empate, `demandaId` crescente.
+- `listar_ofertas_do_produto` devolve todas as ofertas do produto, negociáveis ou não. `listar_demandas_abertas` devolve as demandas com `situacao = "AGUARDANDO"` do produto, com ou sem prazo vencido (o filtro de "demanda aberta" do §4 é aplicado no domínio), em ordem de `recebidaEm` crescente e, em empate, `demandaId` crescente. `listar_demandas_por_origem` devolve as demandas com aquele `demandaOrigemId`, em qualquer situação.
+- `obter_modelo` e `salvar_modelo` leem e gravam o modelo recorrente em `mercado.demanda_modelo` (§6.1), com as chaves `demandaId`, `compradorId`, `produtoId`, `recebidoEm` e `cancelado`.
+- `obter_situacao_balanco(produto_id)` devolve `{"situacao": ..., "situacaoDesde": ...}` gravados no último recálculo do balanço (linha de `mercado.produto_lock`), ou `None` se o produto nunca teve escrita. `salvar_situacao_balanco` grava esses dois valores (RN-06).
 - `listar_demandas_vencidas(agora, limite)` devolve até `limite` `demandaId` com `situacao = "AGUARDANDO"`, `prazoVencido = false`, `prazoDesejado` não nulo e `prazoDesejado < agora`, em ordem de `prazoDesejado`. `listar_janelas_vencidas(agora, limite)` devolve até `limite` `sugestaoId` com `situacao = "EM_FORMACAO"` e `janelaEncerraEm <= agora`, em ordem de `janelaEncerraEm`.
-- `obter_sugestao_ativa(produto_id)` devolve a sugestão do produto com `situacao` ∈ {`ABERTA`, `EM_FORMACAO`}, ou `None`. Existe no máximo uma por produto (RN-16).
+- `obter_sugestao_ativa(produto_id)` devolve a sugestão do produto com `situacao` ∈ {`ABERTA`, `EM_FORMACAO`}, ou `None`. Existe no máximo uma por produto (RN-16). `listar_sugestoes_ativas()` devolve as sugestões `ABERTA` ou `EM_FORMACAO` de todos os produtos, em ordem de `abertaEm` crescente (API-10).
 - `listar_negociacoes` devolve `(itens, total)` em ordem de `definidaEm` decrescente e, em empate, `negociacaoId` decrescente. Entram todas as negociações `LEILAO_DIRETO` e as `VENDA_DIRETA` em que (`escopo == "BUYER"` e `compradorId == empresa`) ou (`escopo == "SUPPLIER"` e `fornecedorId` da oferta == empresa). `modo` e `situacao` `None` = sem filtro.
 - `obter_direta_aberta` devolve a negociação `VENDA_DIRETA` com `situacao = "ABERTA"` daquela demanda e daquela oferta, ou `None`. `listar_leiloes_abertos_do_fornecedor` devolve as negociações `LEILAO_DIRETO` com `situacao = "ABERTA"` do produto com algum item daquele fornecedor.
-- Qualquer método do repositório pode lançar `RepositorioIndisponivel`; o serviço responde `503 DEPENDENCIA_INDISPONIVEL` na API e, no consumo, aplica as novas tentativas da RN-31. Qualquer outra exceção vira `500 ERRO_INTERNO` na API.
-- `publish` é chamado **dentro** da transação da mudança, como último passo antes do fim do bloco, e nunca chama handlers de forma síncrona. Ordem de toda escrita: validar → alterar o estado → publicar. Quando um mesmo fato gera dois eventos (`modo_negociacao_definido` e `leilao_iniciado`), `modo_negociacao_definido` é publicado primeiro. Falha lançada por `publish` está fora do escopo das portas (§13.1).
+- Qualquer método do repositório pode lançar `RepositorioIndisponivel`; o serviço responde `503 DEPENDENCIA_INDISPONIVEL` na API e, no consumo, o handler propaga a exceção (RN-31). Qualquer outra exceção vira `500 ERRO_INTERNO` na API.
+- `publish` é chamado **dentro** da transação da mudança, como último passo antes do fim do bloco, e nunca chama handlers de forma síncrona. Ordem de toda escrita: validar → alterar o estado → publicar. Quando um mesmo fato gera dois eventos (`modo_negociacao_definido` e `leilao_iniciado`), `modo_negociacao_definido` é publicado primeiro. As publicações em `mercado.dlt` (RN-31, RN-32) são as únicas chamadas a `publish` fora de uma transação; elas e a propagação de `RepositorioIndisponivel` são as únicas saídas do handler fora de uma transação concluída. Falha lançada por `publish` está fora do escopo das portas (§13.1).
 - `clock.now()` sempre devolve `datetime` com fuso; se vier sem fuso, tratar como UTC. `clock.sleep(segundos)` é a única forma de esperar; nos testes, o dublê retorna na hora e registra o valor.
 - `chaves_publicas.obter(kid)` devolve a chave pública RSA ou `None` se o `kid` for desconhecido. Se lançar exceção, a resposta é `503 DEPENDENCIA_INDISPONIVEL`.
 - `event_bus.disponivel()` e `repositorio.disponivel()` alimentam `/health/ready`.
 
 Comportamento dos adaptadores reais (não usados pela suíte de aceitação em memória):
 
-- **Repositório (`postgres.py`):** psycopg 3 com `psycopg_pool.ConnectionPool(max_size=5)`, role `svc_mercado`, só o schema `mercado`. `transacao()` abre uma conexão do pool numa variável de contexto e faz commit ao sair do bloco sem exceção. Erros de conexão viram `RepositorioIndisponivel`.
-- **Outbox (`kafka.py`):** dentro da transação, `publish` grava o envelope em `mercado.outbox` pela mesma conexão. Um publicador em cada réplica lê o registro pendente mais antigo com `FOR UPDATE SKIP LOCKED`, envia com `acks=all` e a chave do registro, marca `confirmado_em` e, em falha, reagenda com espera `min(30, 2^tentativas)` segundos. Todo reenvio usa o mesmo `eventId`. Registros da mesma chave são enviados na ordem de gravação.
-- **Consumidor (`kafka.py`):** `aiokafka` com grupo `mercado-service-v1`, `enable_auto_commit=False`. Bytes que não são JSON vão direto para `mercado.dlt` (RN-32). O handler roda fora do laço de eventos (`asyncio.to_thread`). O offset é confirmado só depois do retorno do handler.
+- **Repositório (`postgres.py`):** psycopg 3 com `psycopg_pool.ConnectionPool(max_size=5)`, role `svc_mercado`, só o schema `mercado`. `transacao()` abre uma conexão do pool numa variável de contexto e faz commit ao sair do bloco sem exceção. São falhas de conexão, convertidas em `RepositorioIndisponivel`: SQLSTATE da classe `08`, `57P01`, `57P02`, `57P03` e `PoolTimeout`; as demais exceções sobem como estão (como no Pedidos).
+- **Outbox (`kafka.py`):** dentro da transação, `publish` grava o envelope em `mercado.outbox` pela mesma conexão. Um publicador em cada réplica faz polling a cada 1 s, lê o registro pendente mais antigo com `FOR UPDATE SKIP LOCKED`, envia com `acks=all`, timeout de 5 s e a chave do registro, marca `confirmado_em` e, em falha, reagenda com espera `min(30, 2^tentativas)` segundos. Todo reenvio usa o mesmo `eventId`. Registros da mesma chave são enviados na ordem de gravação.
+- **Consumidor (`kafka.py`):** `aiokafka` com grupo `mercado-service-v1`, `enable_auto_commit=False`. Bytes que não são JSON ou não são UTF-8 vão direto para `mercado.dlt` (RN-32). O handler roda fora do laço de eventos (`asyncio.to_thread`). Publicações em `mercado.dlt` não passam pela outbox: o adaptador envia direto ao broker, com `acks=all`. O offset é confirmado só depois do retorno do handler e do ACK da DLT, quando houver; se o envio à DLT falhar, o offset não é confirmado e a mensagem é reentregue. Se o handler propagar `RepositorioIndisponivel`, ou se o broker falhar (`KafkaConnectionError`, `KafkaTimeoutError`), o offset não é confirmado e a mensagem é reentregue a cada 5 s, sem limite (RN-31, como no Pedidos).
 - **Agendador:** cada réplica chama `executar_prazos` a cada 1 s. A segurança com duas réplicas vem do bloqueio do produto e da nova verificação do estado dentro da transação (RN-33).
 - **JWKS (`jwks.py`):** `jwt.PyJWKClient(JWKS_URL, cache_keys=True, lifespan=3600, timeout=2)`. Falha de rede lança exceção (→ 503); `kid` ausente no conjunto devolve `None` (→ 401).
-- **Logs:** JSON em `stdout` com `timestamp`, `level`, `service` (`mercado-service`), `correlationId`, `message` e, quando conhecidos, `produtoId`, `demandaId`, `negociacaoId` e `eventId`. Sem `print()`. Nunca registrar o token.
+- **Logs:** JSON em `stdout` com `timestamp`, `level`, `service` (`mercado-service`), `correlationId`, `message` e, quando conhecidos, `produtoId`, `demandaId`, `negociacaoId` e `eventId` (mesmas chaves da biblioteca comum do kit). Sem `print()`. Nunca registrar o token.
+- **Métricas (`/metrics`):** `mercado_http_requisicoes_total` (`rota`, `metodo`, `status`), `mercado_http_latencia_segundos` (histograma, `rota`, `metodo`), `mercado_eventos_consumidos_total` (`topico`, `resultado` ∈ `aplicado`, `duplicado`, `ignorado`, `dlt`), `mercado_outbox_pendentes` e `mercado_sugestoes_ativas`. IDs e tokens nunca são rótulos.
+- **Migração (`migracoes/versions/0001_mercado.py`):** roda com `MIGRATION_DATABASE_URL` (role `portal_ddl`). Começa com `DROP TABLE IF EXISTS` de `mercado.match`, `mercado.modo_negociacao` e `mercado.processed_events`, as tabelas de exemplo que o `database/01-init.sql` do kit cria no schema (DG-56). Depois cria, no schema `mercado`, as tabelas do §6.1 (`produto`, `oferta`, `demanda`, `demanda_modelo`, `sugestao_leilao`, `aceite_leilao`, `negociacao` e `negociacao_item`, com os itens de cada negociação e chave `(negociacao_id, fornecimento_id)`) e as técnicas (`produto_lock`, `processed_events`, `idempotency_keys` e `outbox`). Colunas em `snake_case`; IDs `VARCHAR(64)` (`negociacao_id` e `sugestao_id` `UUID`), `correlation_id` `VARCHAR(128)`; dinheiro `NUMERIC(18,4)`, quantidade `NUMERIC(12,2)`, participação `NUMERIC(6,4)`, instantes `TIMESTAMPTZ`, `origem` e `destino` `JSONB`. Concede `SELECT, INSERT, UPDATE, DELETE` nessas tabelas e `SELECT` em `alembic_version` a `svc_mercado`, como a migração do Pedidos.
 
 ## 6. Modelo de domínio
 
@@ -322,6 +335,7 @@ Modelos recorrentes (`tipo = "RECORRENTE"`) ficam em `mercado.demanda_modelo` (`
 | excessoDemanda | quantidade | Sim | Excesso de demanda no último recálculo. |
 | janelaEncerraEm | instante ou `null` | Sim | Primeiro aceite + janela (RN-18); `null` sem aceites. |
 | negociacaoId | string UUID ou `null` | Sim | Leilão criado em T1; `null` fora de `CONVERTIDA`. |
+| correlationId | string ou `null` | Sim | Correlação da requisição do aceite que abriu a janela atual (RN-18); `null` sem aceites. Vai nos eventos publicados por `executar_prazos` (§7.4). |
 | abertaEm | instante | Sim | `clock.now()` na criação. |
 | encerradaEm | instante ou `null` | Sim | Instante da saída para `CONVERTIDA` ou `ENCERRADA`. |
 
@@ -340,7 +354,7 @@ Modelos recorrentes (`tipo = "RECORRENTE"`) ficam em `mercado.demanda_modelo` (`
 | negociacaoId | string UUID | Sim | UUID4 gerado pelo serviço. |
 | modo | enum | Sim | `VENDA_DIRETA` ou `LEILAO_DIRETO`. |
 | produtoId | string | Sim | Da oferta ou da sugestão. |
-| unidade | enum | Sim | Do produto. |
+| unidade | enum | Sim | Da oferta (direta) ou dos itens (leilão); igual à do produto quando ele é conhecido (RN-03). |
 | situacao | enum | Sim | `ABERTA`, `CONCLUIDA`, `SEM_ACORDO` (§6.2). |
 | demandaId | string ou `null` | Sim | Demanda da direta; `null` no leilão. |
 | compradorId | string ou `null` | Sim | Comprador da direta; `null` no leilão. |
@@ -355,9 +369,9 @@ Modelos recorrentes (`tipo = "RECORRENTE"`) ficam em `mercado.demanda_modelo` (`
 | encerradaEm | instante ou `null` | Sim | Instante do `negociacao_fechada` aplicado. |
 | correlationId | string | Sim | Correlação da requisição ou do evento que criou a negociação. |
 
-ItemNegociacao: `fornecimentoId`, `fornecedorId`, `quantidade`, `precoUnitario` (preço da oferta no momento da definição, congelado), `valorItem` (`quantidade × precoUnitario`, 2 casas, `ROUND_HALF_UP`), `participacao` (RN-23), `origem` (da oferta).
+ItemNegociacao: `fornecimentoId`, `fornecedorId`, `quantidade`, `precoUnitario` (preço da oferta no momento da definição, congelado), `valorItem` (`quantidade × precoUnitario`, 2 casas, `ROUND_HALF_UP`), `participacao` (RN-23), `origem` (da oferta). Gravados em `mercado.negociacao_item`, na ordem do lote (RN-21).
 
-Tabelas técnicas: `mercado.produto_lock` (uma linha por produto, usada por `bloquear_produto`, com a `situacao` do último balanço calculado e `situacaoDesde`, o instante em que ela mudou; RN-06), `mercado.processed_events` (`source`, `event_id`, `topico`, `processado_em`; único em `source, event_id`), `mercado.idempotency_keys` e `mercado.outbox`.
+Tabelas técnicas: `mercado.produto_lock` (uma linha por produto, usada por `bloquear_produto`, com a `situacao` do último balanço calculado e `situacaoDesde`, o instante em que ela mudou, lidas e gravadas por `obter_situacao_balanco` e `salvar_situacao_balanco`; RN-06), `mercado.processed_events` (`source`, `event_id`, `topico`, `processado_em`; único em `source, event_id`), `mercado.idempotency_keys` e `mercado.outbox`.
 
 ### 6.2 Estados e transições
 
@@ -381,7 +395,8 @@ Negociações diretas `ABERTA` de uma demanda que sai de `AGUARDANDO` continuam 
 | `ABERTA` | Aceite (API-11) | — | `EM_FORMACAO` |
 | `EM_FORMACAO` | Saída do último aceite (API-13) | Gatilho verdadeiro | `ABERTA` (janela zerada) |
 | `EM_FORMACAO` | Saída do último aceite (API-13) | Gatilho falso | `ENCERRADA` |
-| `EM_FORMACAO` | Fechamento do lote (RN-21) | Janela vencida, todos os elegíveis no lote ou gatilho falso | `CONVERTIDA` |
+| `EM_FORMACAO` | Fechamento do lote (RN-21) | Janela vencida, todos os elegíveis no lote ou gatilho falso, com ao menos um item | `CONVERTIDA` |
+| `EM_FORMACAO` | Fechamento do lote (RN-21) | Nenhum item restante | `ENCERRADA` |
 | `CONVERTIDA`, `ENCERRADA` | qualquer | — | sem mudança (estado final) |
 
 **Negociacao**
@@ -415,7 +430,7 @@ Claims ignorados na v1: `platform_role`, `roles`, `permissions`, `group_id`, `al
 
 ### 7.2 API REST
 
-Todas as respostas de negócio são JSON com nomes de campo em camelCase. O FastAPI não pode validar o corpo antes das verificações 1 a 4 do §10: o corpo é lido com `await request.body()` e validado pelo próprio serviço. `negociacaoId` e `sugestaoId` na URL são UUID; `produtoId`, `demandaId` e `fornecimentoId` na URL ou no corpo são texto de 1 a 64 caracteres de `[A-Za-z0-9._-]`; outro formato → `422 VALIDACAO_INVALIDA`. Corpos com campos fora do contrato, campos ausentes, tipos errados (inclusive número enviado como string ou booleano), quantidade ≤ 0 ou com mais de 2 casas, ou JSON malformado → `422 VALIDACAO_INVALIDA`. Listagens: `page` inteiro ≥ 1 (padrão 1) e `size` inteiro de 1 a 100 (padrão 10); fora disso → `422 VALIDACAO_INVALIDA`; resposta `{"items": [...], "page": P, "size": S, "total": T}`, com `items: []` numa página vazia.
+Todas as respostas de negócio são JSON com nomes de campo em camelCase. O FastAPI não pode validar o corpo antes dos passos 2 a 4 da ordem de verificação do §10: o corpo é lido com `await request.body()` e validado pelo próprio serviço. `negociacaoId` e `sugestaoId` na URL são UUID; `produtoId`, `demandaId` e `fornecimentoId` na URL ou no corpo são texto de 1 a 64 caracteres de `[A-Za-z0-9._-]`; outro formato → `422 VALIDACAO_INVALIDA`. Corpos com campos fora do contrato, campos ausentes, tipos errados (inclusive número enviado como string ou booleano), quantidade ≤ 0 ou com mais de 2 casas, ou JSON malformado → `422 VALIDACAO_INVALIDA`. Listagens: `page` inteiro ≥ 1 (padrão 1) e `size` inteiro de 1 a 100 (padrão 10); fora disso → `422 VALIDACAO_INVALIDA`; resposta `{"items": [...], "page": P, "size": S, "total": T}`, com `items: []` numa página vazia.
 
 | ID | Método | Rota | Escopos | Sucesso | Erros possíveis (na ordem de verificação) |
 |---|---|---|---|---|---|
@@ -437,7 +452,7 @@ Em qualquer rota, banco indisponível → `503 DEPENDENCIA_INDISPONIVEL`; falha 
 
 #### API-04 — Balanço do produto
 
-Sem corpo. `produtoId` conhecido = presente na cópia de produtos ou referenciado por alguma oferta ou demanda (RN-06). Mostra só totais: nenhuma demanda nem comprador é identificado (DG-50). Resposta 200 (cenário E do §8.0):
+Sem corpo. `produtoId` conhecido = presente na cópia de produtos ou referenciado por alguma oferta ou demanda (RN-06). `ofertaTotal`, `demandaTotal`, `situacao` e `excessoDemanda` são calculados na consulta pela RN-06; `situacaoDesde` vem do último recálculo gravado. Mostra só totais: nenhuma demanda nem comprador é identificado (DG-50). Resposta 200 (cenário E do §8.0):
 
 ```json
 {
@@ -453,7 +468,7 @@ Sem corpo. `produtoId` conhecido = presente na cópia de produtos ou referenciad
 }
 ```
 
-`unidade` é `null` se o produto não estiver na cópia de produtos. `excessoDemanda` é `0.00` fora de `DEMANDA_EXCEDENTE`. `sugestaoId` é o da sugestão ativa do produto, ou `null`.
+`unidade` é `null` se o produto não estiver na cópia de produtos. `situacaoDesde` é `null` se o balanço do produto nunca foi recalculado (produto só com `produto_cadastrado`). `excessoDemanda` é `0.00` fora de `DEMANDA_EXCEDENTE`. `sugestaoId` é o da sugestão ativa do produto, ou `null`.
 
 #### API-05 — Vitrine de ofertas
 
@@ -576,7 +591,7 @@ API-09, detalhe de um leilão (cenário L, visto por COMP-B em `2026-11-20T13:00
 
 #### API-10 — Sugestões de leilão
 
-Lista as sugestões visíveis à empresa do token (RN-16), em ordem de `abertaEm` crescente. Cada item (cenário E, visto por FORN-Y em `2026-11-20T12:05:00.000Z`, depois do aceite de FORN-X):
+Lista as sugestões visíveis à empresa do token (RN-16), em ordem de `abertaEm` crescente, com a paginação do §7.2. Cada item (cenário E, visto por FORN-Y em `2026-11-20T12:05:00.000Z`, depois do aceite de FORN-X):
 
 ```json
 {
@@ -626,7 +641,7 @@ Envelope (kit, `CONTRACTS.md`): `eventId`, `eventType` (igual ao tópico), `even
 | `demanda_cancelada` | `demanda-service` | `demandaId` | RF-04 | `mercado.dlt` (RN-32) |
 | `negociacao_fechada` | `negociacao-service` | `negociacaoId` | RF-11 | `mercado.dlt` (RN-32) |
 
-Validação comum (falha → inválida): mensagem não é objeto; falta algum dos oito campos do envelope; `eventId` não é string não vazia; `eventType` diferente do tópico; `eventVersion` diferente de `"1.0"`; `source` diferente do produtor da tabela; `correlationId` fora de 1–128 caracteres de `[A-Za-z0-9._-]`; `timestamp` não é instante com fuso; `payload` não é objeto; campo obrigatório do payload ausente, com tipo errado ou fora do domínio do schema; string obrigatória vazia ou só com espaços; quantidade ou valor com mais de 2 casas. Validação de unidade na RN-03. `produtoId`, `fornecimentoId`, `fornecedorId`, `compradorId`, `demandaId` e `ocorrenciaId` são texto de 1 a 64 caracteres; maior → inválida (DG-55). Campos adicionais do Fornecimento, como `grupoId` no `fornecimento_criado`, são aceitos e ignorados (DG-54).
+Validação comum (falha → inválida): mensagem não é objeto; falta algum dos oito campos do envelope ou há campo além deles; `eventId` não é string não vazia; `eventType` diferente do tópico; `eventVersion` diferente de `"1.0"`; `source` diferente do produtor da tabela; `correlationId` fora de 1–128 caracteres de `[A-Za-z0-9._-]`; `timestamp` não é instante com fuso; `payload` não é objeto; campo obrigatório do payload ausente, com tipo errado ou fora do domínio do schema; string obrigatória vazia ou só com espaços; quantidade ou valor com mais de 2 casas. Validação de unidade na RN-03. `produtoId`, `fornecimentoId`, `fornecedorId`, `compradorId`, `demandaId` e `ocorrenciaId` são texto de 1 a 64 caracteres; maior → inválida (DG-55). Campos adicionais do Fornecimento, como `grupoId` no `fornecimento_criado`, são aceitos e ignorados (DG-54). Três regras desta lista não estão nos schemas e são aplicadas pelo código além deles: string obrigatória só com espaços, mais de 2 casas decimais e unidade (RN-03).
 
 `produto_cadastrado`. Obrigatórios: `produtoId`, `nome`, `unidade`, `cadastradoEm`. `produto_atualizado`: os mesmos, com `atualizadoEm` no lugar de `cadastradoEm`.
 
@@ -775,7 +790,7 @@ Validação comum (falha → inválida): mensagem não é objeto; falta algum do
 }
 ```
 
-`demanda_cancelada` (tópico proposto pelo grupo de Compra e Demanda). Obrigatórios: `demandaId`, `compradorId`, `canceladoEm`. Opcional: `motivo`.
+`demanda_cancelada` (tópico proposto pelo grupo de Compra e Demanda e ainda não criado no kit, INT-MRC-03). Obrigatórios: `demandaId`, `compradorId`, `canceladoEm`. Opcional: `motivo`.
 
 ```json
 {
@@ -799,7 +814,7 @@ Validação comum (falha → inválida): mensagem não é objeto; falta algum do
 }
 ```
 
-`negociacao_fechada` (formato da ESP-NEG-001 e da ESP-PED-001, com o campo opcional `demandaId` proposto por este serviço, INT-MRC-01). Obrigatórios: `negociacaoId` (UUID), `tipo` (`LEILAO` ou `VENDA_DIRETA`), `status` (`ENCERRADO`, `DESERTO`, `RECUSADO` ou `EXPIRADO`), `produtoId`, `alocacoes` (lista; cada item com `fornecimentoId` e `quantidade` > 0). Opcionais: `compradorId`, `demandaId`. Os demais campos das alocações (`fornecedorId`, `pedidoId`, `valorUnitario`, `valorTotal`) são aceitos e ignorados (DG-34). Num leilão, `alocacoes` traz só os itens que ficaram no lote depois das reservas (DG-51).
+`negociacao_fechada` (formato da ESP-NEG-001 e da ESP-PED-001, com o campo `demandaId`, aceito pela Negociação na D38 da ESP-NEG-001; INT-MRC-01). Na `VENDA_DIRETA` a Negociação manda `demandaId` nulo: a demanda da direta é a gravada na negociação (RN-27). Obrigatórios: `negociacaoId` (UUID), `tipo` (`LEILAO` ou `VENDA_DIRETA`), `status` (`ENCERRADO`, `DESERTO`, `RECUSADO` ou `EXPIRADO`), `produtoId`, `alocacoes` (lista; cada item com `fornecimentoId` e `quantidade` > 0). Opcionais: `compradorId`, `demandaId`. Os demais campos das alocações (`fornecedorId`, `pedidoId`, `valorUnitario`, `valorTotal`) são aceitos e ignorados (DG-34). Num leilão, `alocacoes` traz só os itens que ficaram no lote depois das reservas (DG-51).
 
 ```json
 {
@@ -854,13 +869,13 @@ Envelope comum a todas as mensagens publicadas:
 | aggregateId | `negociacaoId` (na DLT, ver abaixo) |
 | payload | objeto específico do tópico |
 
-A chave Kafka (`key` de `publish`) é sempre igual ao `aggregateId`.
+A chave Kafka (`key` de `publish`) é sempre igual ao `aggregateId`. Nos eventos publicados, os IDs de negócio têm de 1 a 64 caracteres (DG-55) e nunca são só espaços (`pattern` `\S` nos schemas), como exige a Negociação ao consumir.
 
 | Tópico | Quando | Chave de partição | Payload | Consumidor |
 |---|---|---|---|---|
 | `modo_negociacao_definido` | Negociação direta aberta (RF-08) ou lote fechado em T1 (RF-10) | `negociacaoId` | `negociacaoId`, `modo`, `produtoId`, `unidade`, `quantidadeTotal`, `valorReferencia`, `demandas[]` {`demandaId`, `demandaOrigemId`, `compradorId`, `quantidade`, `precoMaximo`, `destino`, `prazoDesejado`} (1 na direta, vazia no leilão), `ofertas[]` {`fornecimentoId`, `fornecedorId`, `quantidade`, `precoUnitario`, `valorItem`, `participacao`, `origem`}, `definidaEm` | Negociação (abre a negociação e pede o pedido temporário de cada oferta) |
 | `leilao_iniciado` | Lote fechado em T1 (RF-10), logo depois do `modo_negociacao_definido` do mesmo leilão | `negociacaoId` | `negociacaoId`, `sugestaoId`, `produtoId`, `unidade`, `quantidadeTotal`, `precoInicial`, `incrementoMinimo`, `itens[]` (mesmo formato de `ofertas[]`), `iniciaEm` (T1), `encerraEm` (T2) | Negociação (pede o pedido temporário de cada item e libera os lances com as reservas confirmadas), front-end |
-| `mercado.dlt` | Mensagem consumida inválida ou com falha após 3 execuções (RF-15) | `aggregateId` original se for string de 1 a 128 caracteres; senão `eventId` original convertido com `str` se presente e não vazio; senão `"desconhecido"` | `topicoOrigem`, `originalEvent` (mensagem recebida, intacta), `error` (`"EVENTO_INVALIDO"` ou `"PROCESSAMENTO_FALHOU"`), `detalhe` (1–500 caracteres), `stackTrace` (`""` em `EVENTO_INVALIDO`; pilha de chamadas da última exceção em `PROCESSAMENTO_FALHOU`, como na biblioteca comum do kit), `failedAtAttempt` (1 em `EVENTO_INVALIDO`; 3 em `PROCESSAMENTO_FALHOU`) | operação, QA |
+| `mercado.dlt` | Mensagem consumida inválida ou que falhou 3 vezes por erro que não é de banco indisponível (RF-15) | `aggregateId` original se for string de 1 a 128 caracteres; senão `eventId` original convertido com `str` se presente e não vazio; senão `"desconhecido"` | `topicoOrigem`, `originalEvent` (mensagem recebida, intacta), `error` (`"EVENTO_INVALIDO"` ou `"PROCESSAMENTO_FALHOU"`), `detalhe` (1–500 caracteres), `stackTrace` (`""` em `EVENTO_INVALIDO`; pilha de chamadas da última exceção em `PROCESSAMENTO_FALHOU`, como na biblioteca comum do kit), `failedAtAttempt` (1 em `EVENTO_INVALIDO`; 3 em `PROCESSAMENTO_FALHOU`) | operação, QA |
 
 Na negociação direta, `demandas[0].quantidade` e `ofertas[0].quantidade` são a quantidade negociada (não a quantidade total da demanda), `participacao` é 1.0000 e `valorReferencia` = `valorItem`. Na direta, `prazoDesejado` sai normalizado como instante (§4). O destino segue para a Negociação como referência; o destino do pedido é informado pelo comprador no Pedidos (RN-29).
 
@@ -1190,6 +1205,8 @@ Cenário: Cancelar o modelo recorrente cancela as ocorrências abertas
   Dado o modelo recorrente 36000000-0000-4000-8000-000000000003 e as ocorrências 36000000-0000-4000-8000-000000000031 e 36000000-0000-4000-8000-000000000032 aguardando
   Quando o handler recebe demanda_cancelada com demandaId 36000000-0000-4000-8000-000000000003
   Então as demandas ...031 e ...032 ficam com situacao "CANCELADA" e o balanço de P deixa de contá-las
+  Quando depois o handler recebe demanda_recorrente_gerada com demandaId 36000000-0000-4000-8000-000000000003 e ocorrenciaId 36000000-0000-4000-8000-000000000033
+  Então a demanda ...033 não é criada, a mensagem fica registrada como processada e nada é publicado
 
 # CA-14
 Cenário: Cancelamento de demanda desconhecida ou já encerrada é ignorado
@@ -1383,7 +1400,7 @@ Cenário: Idempotency-Key repetida
 ### RF-09 — Formar o lote pela sugestão
 - **Prioridade:** Must
 - **Enunciado (EARS):** Enquanto a sugestão estiver `ABERTA` ou `EM_FORMACAO` e a janela de adesão não tiver vencido, o serviço deve permitir que fornecedores aceitem, alterem a quantidade e saiam do lote, separando localmente a quantidade aceita.
-- **Regras aplicáveis:** RN-04, RN-16, RN-17, RN-18, RN-19, RN-34
+- **Regras aplicáveis:** RN-04, RN-16, RN-17, RN-18, RN-19, RN-20, RN-34
 - **Interface:** API-11, API-12, API-13
 
 **Critérios de aceitação**
@@ -1530,8 +1547,8 @@ Cenário: Fechamento desconhecido, repetido ou com demanda de outro comprador
 ### RF-12 — Retirar do balanço demandas com prazo vencido
 - **Prioridade:** Should
 - **Enunciado (EARS):** Quando `executar_prazos` rodar com `agora` maior que o `prazoDesejado` de uma demanda aguardando, o serviço deve marcar `prazoVencido`, retirá-la do balanço e recusar novas negociações diretas para ela, sem mudar a situação da demanda.
-- **Regras aplicáveis:** RN-10, RN-33
-- **Interface:** `executar_prazos`; API-06
+- **Regras aplicáveis:** RN-10, RN-14, RN-33
+- **Interface:** `executar_prazos`; API-06, API-07
 
 **Critérios de aceitação**
 ```gherkin
@@ -1605,7 +1622,7 @@ Cenário: Chaves públicas indisponíveis
 
 ### RF-15 — Consumir mensagens com idempotência e DLT
 - **Prioridade:** Must
-- **Enunciado (EARS):** Quando uma mensagem for recebida, o serviço deve validá-la, ignorar duplicatas válidas, repetir o processamento em falha até 3 execuções e publicar na DLT a mensagem inválida ou que continuar falhando.
+- **Enunciado (EARS):** Quando uma mensagem for recebida, o serviço deve validá-la, ignorar duplicatas válidas, repetir o processamento em falha até 3 execuções e publicar na DLT a mensagem inválida ou que continuar falhando; com o banco indisponível, a mensagem é reentregue, sem ir para a DLT.
 - **Regras aplicáveis:** RN-31, RN-32
 - **Interface:** todos os tópicos do §7.3; `mercado.dlt`
 
@@ -1624,8 +1641,11 @@ Cenário: Envelope sem payload, duas vezes
   E o eventId não é registrado como processado
 
 # CA-57
-Cenário: Banco indisponível em todas as tentativas
-  Dado o repositório lançando RepositorioIndisponivel em toda transação
+Cenário: Banco indisponível e falha persistente
+  Dado repositorio.transacao lançando RepositorioIndisponivel
+  Quando o handler recebe demanda_criada de DEM-A
+  Então o handler propaga RepositorioIndisponivel, nada é publicado e o eventId não é registrado como processado
+  Dado o repositório lançando ValueError em toda transação
   Quando o handler recebe demanda_criada de DEM-A
   Então clock.sleep é chamado com 1 e 2, nesta ordem
   E publica em mercado.dlt com error "PROCESSAMENTO_FALHOU", failedAtAttempt 3 e stackTrace não vazio
@@ -1678,9 +1698,9 @@ Cenário: Exceção inesperada do repositório
 | RN-03 | Unidade: se o produto estiver na cópia local, oferta (`fornecimento_*`) e demanda (`demanda_*`) com `unidade` diferente da do produto são mensagens inválidas (DLT `EVENTO_INVALIDO`, detalhe `"Unidade diferente da do produto."`). Produto ainda desconhecido: a unidade do evento é aceita sem comparação. Não há conversão entre unidades. (DG-06) | P em `TON`, oferta em `KG` → DLT. |
 | RN-04 | Oferta negociável: `preco > 0` e `quantidadeDisponivel > 0`. Quantidade comprometida = soma das quantidades dos aceites da oferta em sugestões `EM_FORMACAO`. Disponível livre = `max(0, quantidadeDisponivel − quantidade comprometida)`. A reserva de estoque dos pedidos temporários (pedidos pela Negociação, na direta e no leilão) já chega descontada em `quantidadeDisponivel`; o serviço não faz outro desconto. (DG-05, DG-10, DG-51, PROF-09) | Disponível 60.00 com aceite de 60.00 → livre 0.00. |
 | RN-05 | Escala: valores e quantidades com mais de 2 casas (participação: 4 casas) são rejeitados na entrada; toda conta usa `Decimal` e arredonda só onde a regra manda. | `quantidade` 0.001 → `422 VALIDACAO_INVALIDA`. |
-| RN-06 | Balanço por `produtoId`: oferta total = soma do disponível livre das ofertas negociáveis; demanda total = soma do saldo negociável das demandas abertas; situação conforme o glossário. É recalculado, com `bloquear_produto`, na mesma transação de toda mudança de ofertas, demandas, aceites ou negociações do produto. Quando a situação muda, grava `situacaoDesde = agora`. Depois de cada recálculo, aplica a RN-16 e, se houver sugestão `EM_FORMACAO` com o gatilho falso, a RN-21. Produto conhecido = na cópia de produtos ou referenciado por oferta ou demanda; senão a API-04 e a API-05 respondem `404 PRODUTO_NAO_ENCONTRADO`. (DG-01, DG-02, DG-05, PROF-01) | Cenário E: 100.00 × 130.00 → `DEMANDA_EXCEDENTE`, excesso 30.00. |
+| RN-06 | Balanço por `produtoId`: oferta total = soma do disponível livre das ofertas negociáveis; demanda total = soma do saldo negociável das demandas abertas; situação conforme o glossário. É recalculado, com `bloquear_produto`, na mesma transação de toda mudança de ofertas, demandas, aceites ou negociações do produto. Quando a situação muda, inclusive no primeiro cálculo do produto, grava `situacaoDesde = agora` (`salvar_situacao_balanco`). Depois de cada recálculo, aplica a RN-16 e, se houver sugestão `EM_FORMACAO` com o gatilho falso, a RN-21. Produto conhecido = na cópia de produtos ou referenciado por oferta ou demanda (`obter_produto` ou `obter_situacao_balanco` não nulo); senão a API-04 e a API-05 respondem `404 PRODUTO_NAO_ENCONTRADO`. (DG-01, DG-02, DG-05, PROF-01) | Cenário E: 100.00 × 130.00 → `DEMANDA_EXCEDENTE`, excesso 30.00. |
 | RN-07 | Aptidão (oferta para demanda): mesmo `produtoId`; oferta negociável com disponível livre > 0; `preco ≤ precoMaximo` quando `precoMaximo` não é nulo; `fornecedorId ≠ compradorId`; demanda aberta (aguardando e sem prazo vencido; senão `apta = false` para todas as ofertas). A quantidade não precisa cobrir a demanda inteira (atendimento parcial, RN-15). (DG-32) | DEM-A (máx. 9.00) × OF-X a 9.50 → não apta. |
-| RN-08 | Demandas: `demanda_criada` `UNICA` cria a demanda `AGUARDANDO` com `saldo = quantidade`; `RECORRENTE` só grava o modelo (fora do balanço e das rotas); `demanda_recorrente_gerada` cria a demanda com `demandaId = ocorrenciaId` e `demandaOrigemId = demandaId` do evento. `demandaId` já existente (com outro `eventId`) → ignorado, sem DLT. `destino` é obrigatório. (DG-02, DG-03) | Ocorrência ...031 de origem ...003 → demanda ...031. |
+| RN-08 | Demandas: `demanda_criada` `UNICA` cria a demanda `AGUARDANDO` com `saldo = quantidade`; `RECORRENTE` só grava o modelo (fora do balanço e das rotas); `demanda_recorrente_gerada` cria a demanda com `demandaId = ocorrenciaId` e `demandaOrigemId = demandaId` do evento; se o modelo de origem estiver gravado com `cancelado = true`, a ocorrência é ignorada, sem DLT (DG-04). `demandaId` já existente (com outro `eventId`) → ignorado, sem DLT. `destino` é obrigatório. (DG-02, DG-03) | Ocorrência ...031 de origem ...003 → demanda ...031. |
 | RN-09 | Cancelamento: se `demandaId` for uma demanda `AGUARDANDO` com o mesmo `compradorId` → `CANCELADA`, `encerradaEm = agora`. Se for um modelo recorrente com o mesmo `compradorId` → modelo cancelado e todas as demandas `AGUARDANDO` com aquele `demandaOrigemId` → `CANCELADA`. Desconhecido, já encerrado ou com outro `compradorId` → ignorado, sem DLT. Negociações diretas abertas da demanda continuam. (DG-04) | Cancelar ...003 → ...031 e ...032 `CANCELADA`. |
 | RN-10 | Prazo vencido: em `executar_prazos`, demanda `AGUARDANDO` com `prazoVencido = false` e `prazoDesejado < agora` passa a `prazoVencido = true`, sem mudar `situacao` nem `encerradaEm`, e o balanço do produto é recalculado. Demanda com prazo vencido não conta no balanço e não abre negociação direta (`409 DEMANDA_ENCERRADA`); diretas já abertas continuam. `prazoDesejado` nulo nunca vence. O Mercado não declara a demanda expirada: isso é regra do Demanda (DG-48). | Prazo 23:59:59.000; agora 23:59:59.001 → `prazoVencido` true, demanda total 0.00. |
 | RN-11 | Vitrine pública para compradores e fornecedores, com preço, quantidade, origem e fornecedor de cada oferta (DG-49): ofertas negociáveis do produto com disponível livre > 0, em ordem de `preco` crescente; empate por disponível livre decrescente; depois `criadaEm` crescente; depois `fornecimentoId` crescente. A vitrine é o "leilão reverso" do professor: só ordenação, sem evento nem prazo. (PROF-06) | OF-Y 7.50 antes de OF-X 8.00. |
@@ -1690,10 +1710,10 @@ Cenário: Exceção inesperada do repositório
 | RN-15 | Saldo: abrir uma direta soma a quantidade em `emNegociacao`. Uma demanda pode ter várias diretas abertas com ofertas diferentes, desde que a soma não passe do saldo. (DG-32, DG-33) | DEM-A 50.00: 30.00 + 20.00 → ok; mais 0.01 → 422. |
 | RN-16 | Sugestão: no máximo uma ativa (`ABERTA` ou `EM_FORMACAO`) por produto. Recalculado o balanço: sem sugestão ativa e gatilho verdadeiro → cria uma `ABERTA`; sugestão `ABERTA` e gatilho falso → `ENCERRADA`. `excessoDemanda` é atualizado a cada recálculo. A API-10 mostra a sugestão à empresa com aceite nela ou que é fornecedor elegível; nunca mostra nomes de outros fornecedores. Sem expiração por tempo. (DG-01, DG-07, DG-09, DG-12) | Oferta nova cobre a demanda → `ENCERRADA` na hora. |
 | RN-17 | Aceite (API-11), na ordem do §7.2: sugestão ativa e, se `EM_FORMACAO`, `agora < janelaEncerraEm` (senão `409 SUGESTAO_ENCERRADA`); oferta existente e negociável (senão `422 OFERTA_INDISPONIVEL`); oferta da empresa do token (senão `403 OFERTA_DE_OUTRA_EMPRESA`); mesmo produto (senão `422 PRODUTO_DIFERENTE`); empresa sem item em leilão `ABERTA` do produto (senão `409 FORNECEDOR_EM_LEILAO`); oferta sem aceite na sugestão (senão `409 ACEITE_JA_REGISTRADO`); quantidade ≤ disponível livre (senão `422 QUANTIDADE_INDISPONIVEL`). Uma empresa pode ter parte do estoque no lote e o resto na direta. (DG-14, DG-15, DG-17) | FORN-Y com OF-Y 40.01 (livre 40.00) → 422. |
-| RN-18 | Janela de adesão: o primeiro aceite de uma sugestão `ABERTA` a leva a `EM_FORMACAO` com `janelaEncerraEm = agora + LEILAO_JANELA_ADESAO_MINUTOS`. Aceites seguintes não mudam a janela. (DG-10, DG-13) | Aceite às 12:00 → janela até 13:00. |
-| RN-19 | Alterar e sair (API-12, API-13): permitidos enquanto a sugestão está `EM_FORMACAO` e `agora < janelaEncerraEm`; senão `409 SUGESTAO_ENCERRADA`. Na alteração, a nova quantidade deve ser ≤ disponível livre + quantidade atual do aceite (senão `422 QUANTIDADE_INDISPONIVEL`). Aceite inexistente ou de oferta de outra empresa → `404 ACEITE_NAO_ENCONTRADO`. Ao sair o último aceite: gatilho verdadeiro → `ABERTA` com `janelaEncerraEm = null`; falso → `ENCERRADA`. (DG-18) | Sair de S1 com gatilho verdadeiro → `ABERTA`. |
+| RN-18 | Janela de adesão: o primeiro aceite de uma sugestão `ABERTA` a leva a `EM_FORMACAO` com `janelaEncerraEm = agora + LEILAO_JANELA_ADESAO_MINUTOS` e grava na sugestão o `correlationId` da requisição. Aceites seguintes não mudam a janela nem o `correlationId`. (DG-10, DG-13) | Aceite às 12:00 → janela até 13:00. |
+| RN-19 | Alterar e sair (API-12, API-13): permitidos enquanto a sugestão está `EM_FORMACAO` e `agora < janelaEncerraEm`; senão `409 SUGESTAO_ENCERRADA`. Na alteração, a nova quantidade deve ser ≤ disponível livre + quantidade atual do aceite (senão `422 QUANTIDADE_INDISPONIVEL`). Aceite inexistente ou de oferta de outra empresa → `404 ACEITE_NAO_ENCONTRADO`. Ao sair o último aceite: gatilho verdadeiro → `ABERTA` com `janelaEncerraEm = null` e `correlationId = null`; falso → `ENCERRADA`. (DG-18) | Sair de S1 com gatilho verdadeiro → `ABERTA`. |
 | RN-20 | Depois de T1 não há entrada, alteração nem saída: o lote fica fixo. (DG-14) | API-11 em S1 `CONVERTIDA` → 409. |
-| RN-21 | Fechamento do lote (T1 = `agora`), numa sugestão `EM_FORMACAO`, no primeiro destes: (a) `executar_prazos` com `janelaEncerraEm <= agora`; (b) depois de um aceite, todas as empresas fornecedoras elegíveis têm aceite; (c) recálculo do balanço com o gatilho falso. Itens na ordem de `aceitoEm` e depois `fornecimentoId`, com `quantidade = min(quantidade aceita, quantidadeDisponivel atual)`; itens com quantidade 0 ou de oferta não negociável saem. Sem itens → sugestão `ENCERRADA`, sem negociação e sem evento. Com itens → cria a negociação `LEILAO_DIRETO` `ABERTA` com `iniciaEm = T1` e `encerraEm = T1 + LEILAO_DURACAO_HORAS`, a sugestão vai a `CONVERTIDA` com o `negociacaoId`, e são publicados `modo_negociacao_definido` e `leilao_iniciado`, nessa ordem. A Negociação então pede o pedido temporário de cada item e só libera os lances com todas as reservas confirmadas; item com reserva recusada sai do lote antes do primeiro lance (DG-51). Depois, o balanço é recalculado (uma nova sugestão pode abrir para os demais fornecedores). (DG-10, DG-13, DG-16, PROF-02, PROF-03) | Cenário L: lote fechado às 12:10 com OF-X e OF-Y. |
+| RN-21 | Fechamento do lote (T1 = `agora`), numa sugestão `EM_FORMACAO`, no primeiro destes: (a) `executar_prazos` com `janelaEncerraEm <= agora`; (b) depois de um aceite (API-11), todas as empresas fornecedoras elegíveis têm aceite; (c) recálculo do balanço com o gatilho falso. Itens na ordem de `aceitoEm` e depois `fornecimentoId`, com `quantidade = min(quantidade aceita, quantidadeDisponivel atual)`; itens com quantidade 0 ou de oferta não negociável saem. Sem itens → sugestão `ENCERRADA`, sem negociação e sem evento. Com itens → cria a negociação `LEILAO_DIRETO` `ABERTA` com `iniciaEm = T1` e `encerraEm = T1 + LEILAO_DURACAO_HORAS`, a sugestão vai a `CONVERTIDA` com o `negociacaoId`, e são publicados `modo_negociacao_definido` e `leilao_iniciado`, nessa ordem. A Negociação então pede o pedido temporário de cada item e só libera os lances com todas as reservas confirmadas; item com reserva recusada sai do lote antes do primeiro lance (DG-51). Depois, o balanço é recalculado (uma nova sugestão pode abrir para os demais fornecedores). (DG-10, DG-13, DG-16, PROF-02, PROF-03) | Cenário L: lote fechado às 12:10 com OF-X e OF-Y. |
 | RN-22 | Preço inicial e incremento: `valorItem = quantidade × precoUnitario` (`ROUND_HALF_UP`, 2 casas); `precoInicial = Σ valorItem`; `incrementoMinimo = max(0.01, precoInicial × LEILAO_INCREMENTO_MINIMO_PERCENTUAL / 100)` (`ROUND_HALF_UP`, 2 casas). O preço inicial é o valor mínimo do primeiro lance; o lance é o valor total do lote inteiro. (DG-11, DG-19, DG-20, PROF-04, PROF-05) | 480.00 + 300.00 = 780.00; incremento 7.80. |
 | RN-23 | Participação: `participacao = valorItem / precoInicial` (`ROUND_HALF_UP`, 4 casas); a diferença para `1.0000` é somada ao item de maior `valorItem` (empate: o primeiro na ordem). Na direta, `participacao = 1.0000`. O rateio do valor vencedor por essas participações é aplicado pela Negociação; se um item sair por reserva recusada, ela recalcula preço inicial, incremento e participações pela RN-22 e por esta regra, sobre os itens restantes. (DG-22, DG-23, DG-51) | 480/780 → 0.6154; 300/780 → 0.3846; soma 1.0000. |
 | RN-24 | Contexto do produto: no detalhe (API-09) de um `LEILAO_DIRETO` `ABERTA`, `contextoProduto = {situacao, desde}` com a situação atual do balanço do produto e `situacaoDesde`. Só consulta; o leilão nunca é interrompido por mudança de balanço. (DG-08) | Oferta nova às 12:30 → `OFERTA_SUFICIENTE` desde 12:30. |
@@ -1703,8 +1723,8 @@ Cenário: Exceção inesperada do repositório
 | RN-28 | Fornecedor elegível e conflito no leilão: quem tem oferta no lote não dá lance nele, e qualquer comprador pode dar lance, com ou sem demanda; essas regras são aplicadas pela Negociação. Este serviço envia em `leilao_iniciado` os `fornecedorId` dos itens. (DG-24, DG-25, DG-26) | — |
 | RN-29 | Destino: na direta, o destino da demanda segue em `modo_negociacao_definido` como referência para a Negociação. O destino do pedido, na direta e no leilão, é informado pelo comprador no Pedidos depois da venda (ESP-PED-001 D-02). (DG-28) | — |
 | RN-30 | Idempotência HTTP: escopo = (empresa, `sub`, método, caminho canônico, `Idempotency-Key`). Só respostas 2xx são memorizadas, com status, corpo, `Location` e o hash do corpo da requisição, por 24 h, na mesma transação da mudança. Mesmo escopo e mesmo corpo → mesma resposta, sem efeito e sem evento. Mesmo escopo e outro corpo → `409 IDEMPOTENCIA_CONFLITO`. | Repetir CA-33 com o mesmo corpo → 1 evento. |
-| RN-31 | Consumo: a validação (RN-32) vem antes da deduplicação. Mensagem válida com (`source`, `eventId`) já processado → sem efeito, sem publicação. Efeito e `registrar_evento_processado` na mesma transação. Se a transação falhar (`RepositorioIndisponivel` ou outra exceção), o handler repete até 3 execuções no total, chamando `clock.sleep(1)` e `clock.sleep(2)` entre elas, como a biblioteca comum do kit (`services/common/consumer.py`); se a terceira falhar, publica em `mercado.dlt` com `error` `"PROCESSAMENTO_FALHOU"`, `failedAtAttempt` 3 e `stackTrace` com a pilha de chamadas da última exceção, fora da transação que falhou. | 3 falhas → DLT com tentativa 3. |
-| RN-32 | Mensagem consumida inválida (§7.3, RN-03) não altera estado e é publicada em `mercado.dlt` na hora, com `error` `"EVENTO_INVALIDO"`, `failedAtAttempt` 1 e chave conforme §7.4. Não é registrada como processada. O handler nunca propaga exceção. | Envelope sem `payload` → DLT com chave DEM-A. |
+| RN-31 | Consumo: a validação (RN-32) vem antes da deduplicação. Mensagem válida com (`source`, `eventId`) já processado → sem efeito, sem publicação. Efeito e `registrar_evento_processado` na mesma transação. `RepositorioIndisponivel` → o handler propaga a exceção, sem publicar nada (o adaptador não confirma o offset e reentrega a cada 5 s, sem limite; DG-57). Outra exceção → o handler repete a transação até 3 execuções no total, chamando `clock.sleep(1)` e `clock.sleep(2)` entre elas, como a biblioteca comum do kit (`services/common/consumer.py`); se a terceira falhar, publica em `mercado.dlt` com `error` `"PROCESSAMENTO_FALHOU"`, `failedAtAttempt` 3 e `stackTrace` com a pilha de chamadas da última exceção, fora da transação que falhou. | Banco fora do ar → reentrega, sem DLT; `ValueError` 3 vezes → DLT com tentativa 3. |
+| RN-32 | Mensagem consumida inválida (§7.3, RN-03) não altera estado e é publicada em `mercado.dlt` na hora, com `error` `"EVENTO_INVALIDO"`, `failedAtAttempt` 1 e chave conforme §7.4. Não é registrada como processada. Aqui o handler não propaga exceção. | Envelope sem `payload` → DLT com chave DEM-A. |
 | RN-33 | `executar_prazos` processa, cada um numa transação própria e com `bloquear_produto`, os itens de `listar_janelas_vencidas(agora, 100)` (RN-21 a) e de `listar_demandas_vencidas(agora, 100)` (RN-10), verificando de novo a condição antes de agir. Chamar duas vezes no mesmo instante não repete efeitos. Devolve quantos registros mudaram (sugestões fechadas e demandas marcadas com prazo vencido). | Segunda chamada às 13:00 → 0. |
 | RN-34 | Requisição rejeitada (qualquer 4xx ou 5xx) não altera estado, não memoriza idempotência e não publica evento. | Direta com 422 → `emNegociacao` igual. |
 
@@ -1811,7 +1831,7 @@ Campos da entidade × projeções: `saldoNegociavel` (API-06), `excessoDemanda`,
 
 ## 13. Premissas, decisões e questões em aberto
 
-Decisões do autor (Brunno Alexcson), tomadas a partir das respostas do professor, dos repositórios dos outros grupos e das discussões do grupo. Cada decisão traz a alternativa registrada (↻) e se vale validá-la no Status Report. Fontes: transcrição da sessão de dúvidas com o professor (Granola) e resumo da aula sobre oferta, demanda e leilão; respostas do professor pelo Teams em 12/11/2026, registradas pelo Fornecimento (F14) e transcrição da aula 2 (F7); diagrama da arquitetura; kit de Infra; ESP-PED-001 v2.1 e respostas do Pedidos de 19/11; ESP-NEG-001; contrato de eventos v2.3 do Fornecimento; contratos do grupo de Compra e Demanda; Identity-Service.
+Decisões do autor (Brunno Alexcson), tomadas a partir das respostas do professor, dos repositórios dos outros grupos e das discussões do grupo. Cada decisão traz a alternativa registrada (↻) e se vale validá-la no Status Report. Fontes: transcrição da sessão de dúvidas com o professor (Granola) e resumo da aula sobre oferta, demanda e leilão; respostas do professor pelo Teams em 12/11/2026, registradas pelo Fornecimento (F14) e transcrição da aula 2 (F7); diagrama da arquitetura; kit de Infra; ESP-PED-001 v2.1 e respostas do Pedidos de 19/11; ESP-NEG-001; contrato de eventos v2.3 do Fornecimento (v2.5 na INT-MRC-05); contratos do grupo de Compra e Demanda; Identity-Service.
 
 **Regras do professor citadas**
 
@@ -1837,7 +1857,7 @@ Decisões do autor (Brunno Alexcson), tomadas a partir das respostas do professo
 | DG-01 | Decisão | Gatilho da sugestão de leilão | Qualquer excesso de demanda sobre a oferta (com oferta > 0), configurável por `EXCESSO_DEMANDA_MINIMO_PERCENTUAL` (padrão 0). ↻ Margem mínima definida pelo professor (só configuração). Status Report: sim. |
 | DG-02 | Decisão | O que conta como demanda no balanço | Demandas únicas e ocorrências já geradas, enquanto aguardam; o modelo recorrente não conta; sem janela de tempo. ↻ Somar as ocorrências futuras numa janela (ex.: 30 dias) usando `frequencia` e `proximaOcorrenciaEm`. Status Report: opcional. |
 | DG-03 | Decisão | Contratos do Demanda | Os campos de `demanda_criada` e `demanda_recorrente_gerada` atendem o matching. Pedidos ao grupo (17/11, refeitos em 25/11 na issue #1 de `LuccaStuart/portal-b2b-compra-demanda`): `precoMaximo` com `exclusiveMinimum: 0`; `uf` como uma das 27 siglas, em maiúsculas; `cidade` de 1 a 255 caracteres, aparada; IDs de 1 a 64 caracteres (DG-55); registrar o Mercado como consumidor de `demanda_recorrente_gerada` e `demanda_cancelada` e enviar os exemplos desses dois eventos. Pergunta: a demanda pode ser editada na v1? Se puder, o Mercado precisa de um evento de alteração. Saíram dos pedidos: `frequencia` como lista fechada (o Mercado não usa o campo, DG-45) e `ocorrenciaId` em `demanda_cancelada` (para cancelar uma ocorrência, basta `demandaId` igual ao `ocorrenciaId`, RN-08 e RN-09). Pedidos complementares na issue #2 (25/11): `quantidade` e `precoMaximo` com até 2 casas; chave `demandaId` nas mensagens (no `demanda_recorrente_gerada`, a da origem); a primeira ocorrência da recorrente também como `demanda_recorrente_gerada`; `ocorrenciaId` único e nenhuma ocorrência depois do cancelamento do modelo. |
-| DG-04 | Decisão | Cancelamento de recorrente | Cancelar o modelo cancela as ocorrências aguardando (RN-09). ↻ Manter as ocorrências já geradas. |
+| DG-04 | Decisão | Cancelamento de recorrente | Cancelar o modelo cancela as ocorrências aguardando (RN-09), e ocorrência que chega depois do cancelamento do modelo é ignorada (RN-08). ↻ Manter as ocorrências já geradas. |
 | DG-05 | Decisão | O que conta como oferta | `quantidadeDisponivel` mais recente; a reserva dos pedidos já vem descontada pelo Fornecimento. ↻ Desconto local na abertura da negociação. O intervalo entre T1 e a reserva é tratado na PR-01. |
 | DG-06 | Decisão | Unidades | Balanço por `produtoId`; a unidade é do produto; sem conversão; unidade divergente vai para a DLT. ↻ Conversão KG↔TON. |
 | DG-07 | Decisão | Estabilidade da sugestão | A sugestão acompanha o balanço em tempo real, sem expiração por tempo. ↻ Tempo mínimo aberta. Status Report: opcional. |
@@ -1864,7 +1884,7 @@ Decisões do autor (Brunno Alexcson), tomadas a partir das respostas do professo
 | DG-28 | Decisão | Destino da entrega | Informado pelo comprador no Pedidos depois da venda, na direta e no leilão (ESP-PED-001 D-02). O Mercado só repassa o destino da demanda na direta, como referência (RN-29). Substitui a proposta da v0.4 (destino da demanda indicada no lance), não adotada pelo Pedidos. |
 | DG-29 | Decisão | Leilão deserto | O estoque volta pela cadeia Negociação → Pedidos → Fornecimento; o Mercado só reage ao `estoque_atualizado`. |
 | DG-30 | Decisão | Par na negociação direta | O comprador escolhe a oferta na vitrine e pede a negociação ao Mercado, que valida e publica. ↻ O Mercado forma o par com a oferta mais barata. Status Report: sim. |
-| DG-31 | Decisão | Abertura da direta | O pedido nasce na abertura (`modo_negociacao_definido`), com comprador e destino conhecidos (F7, F14). ↻ Pedido só no acordo (como a ESP-PED-001 atual). Status Report: sim. |
+| DG-31 | Decisão | Abertura da direta | O pedido temporário nasce na abertura da direta (F7, F14): a Negociação o pede ao consumir `modo_negociacao_definido` (DG-52), sem comprador e sem destino, que chegam depois (DG-28, DG-39). ↻ Pedido só no acordo. Status Report: sim. |
 | DG-32 | Decisão | Atendimento parcial | A demanda tem saldo; uma oferta pode atender parte, e várias ofertas somam. ↻ Só atendimento integral, como o boilerplate do kit (deixa demandas paradas com oferta suficiente). Status Report: sim. |
 | DG-33 | Decisão | Diretas simultâneas | Várias ao mesmo tempo, limitadas ao saldo da demanda. ↻ Uma por vez; ou sem limite. Status Report: sim. |
 | DG-34 | Decisão | Preço negociado | Vale só para o pedido; o Mercado não usa o valor acordado. |
@@ -1873,7 +1893,7 @@ Decisões do autor (Brunno Alexcson), tomadas a partir das respostas do professo
 | DG-37 | Decisão | Gatilho do pedido temporário | A Negociação publica `pedido_temporario_solicitado` por oferta ao consumir `leilao_iniciado` (leilão) ou `modo_negociacao_definido` (direta); o Pedidos não consome eventos do Mercado (DG-51, DG-52). Substitui a proposta da v0.4 (Pedidos consumindo `leilao_iniciado`). |
 | DG-38 | Decisão | Pedido por item do lote | Um pedido temporário por oferta, com unicidade `(negociacaoId, fornecimentoId)`: confirmado pelo Pedidos em 19/11. |
 | DG-39 | Decisão | Comprador e solicitante | O pedido temporário nasce sem comprador, na direta e no leilão, e recebe o comprador no `negociacao_fechada`; o solicitante é a Negociação. Confirmado pelo Pedidos em 19/11. |
-| DG-40 | Decisão | Consumo de `negociacao_fechada` | O Mercado consome para encerrar a negociação e abater o saldo (RN-25 a RN-27). Pendências: Infra registrar o consumidor; Negociação aceitar o `demandaId` opcional. |
+| DG-40 | Decisão | Consumo de `negociacao_fechada` | O Mercado consome para encerrar a negociação e abater o saldo (RN-25 a RN-27). A Negociação aceitou o `demandaId` em 19/11 (D38 da ESP-NEG-001). Pendência: Infra registrar o consumidor (INT-MRC-03). |
 | DG-41 | Decisão | `lance_realizado` | Não consumido; o resultado chega pelo `negociacao_fechada`. Pedir à Infra que retire o Mercado da lista do `CONTRACTS.md`. ↻ Consumir para estatísticas de preço. |
 | DG-42 | Decisão | Evento de sugestão | Sem tópico próprio; a sugestão é só consulta (DG-09). ↻ Evento para serviço de notificação. |
 | DG-43 | Decisão | Alteração de preço da oferta | Resolvida pelo `fornecimento_atualizado` (contrato v2.0 do Fornecimento), consumido pelo Mercado (RN-01). Pendência: Infra criar o tópico. |
@@ -1889,6 +1909,8 @@ Decisões do autor (Brunno Alexcson), tomadas a partir das respostas do professo
 | DG-53 | Decisão | Fechamento republicado | Só o primeiro `negociacao_fechada` de cada `negociacaoId` é aplicado. Se o Pedidos mandar o fechamento para a DLT e a Negociação republicar corrigido com outro `eventId`, o Mercado ignora a correção (RN-25); é um caso de erro raro, aceito na v1. ↻ Reprocessar o fechamento quando as quantidades mudarem, desfazendo o abatimento anterior (exige guardar o abatido por demanda). Status Report: não. |
 | DG-54 | Decisão | Auto-negociação por grupo econômico | Na v1 o conflito de interesse compara só a empresa (`tenant_id`, RN-14, RN-28); o `grupoId` que o Fornecimento passou a enviar no `fornecimento_criado` (issue #35) é aceito e ignorado. ↻ Comparar o `group_id` do token com o `grupoId` da oferta (exige guardar o `grupoId` na cópia da oferta). Status Report: opcional. |
 | DG-55 | Decisão | Tamanho dos IDs de negócio | `produtoId`, `fornecimentoId`, `fornecedorId`, `compradorId`, `demandaId` e `ocorrenciaId` têm de 1 a 64 caracteres, na API, nos eventos consumidos e nos publicados, como na Negociação, no Pedidos, no Fornecimento e no kit da Infra (`database/01-init.sql`, `VARCHAR(64)`). Evento consumido com ID maior vai para `mercado.dlt`. O envelope (`correlationId`, `aggregateId`) continua com até 128. Fecha a INT-NEG-12 da ESP-NEG-001. ↻ Aceitar até 128 exigiria alterar as colunas de ID da Negociação e do Pedidos. |
+| DG-56 | Decisão | Tabelas de exemplo do kit | O `database/01-init.sql` do kit cria `mercado.match`, `mercado.modo_negociacao` e `mercado.processed_events`, sem dados e num formato diferente do §6.1. A migração 0001 do Mercado começa com `DROP TABLE IF EXISTS` dessas três tabelas e cria as suas; a Infra é avisada para retirá-las do `01-init.sql` (INT-MRC-03). O dono do schema (`portal_ddl`) pode apagá-las. ↻ Usar outro nome para `processed_events` e conviver com as tabelas do kit. |
+| DG-57 | Decisão | Banco indisponível no consumo | Como no Pedidos (ESP-PED-001, RN-26): o handler propaga `RepositorioIndisponivel` e o adaptador reentrega a mensagem a cada 5 s, sem limite e sem DLT; só falhas de outro tipo vão para a `mercado.dlt` depois de 3 execuções (RN-31). ↻ Tratar como as demais falhas (3 execuções e DLT), o que perde a mensagem se o banco ficar fora do ar por mais de 3 s. |
 | PR-01 | Premissa | Intervalo entre T1 e a reserva | Em T1 a separação local é liberada; até chegar o `estoque_atualizado` da reserva do pedido temporário, a quantidade do lote volta a contar como disponível livre. Uma direta aberta nesse intervalo pode tomar o estoque; nesse caso a reserva do item é recusada e a Negociação o retira do lote antes do primeiro lance (DG-51). Nenhuma venda acontece sem reserva; o efeito possível é um lote menor que o aceito. |
 | PR-02 | Premissa | Fim do leilão | Este serviço não acompanha T2; a negociação só muda com o `negociacao_fechada`. |
 | PR-03 | Premissa | Ordem entre tópicos | Demanda ou oferta podem chegar antes do produto; o balanço usa o `produtoId` e a unidade do evento até o produto chegar (RN-03). |
@@ -1897,10 +1919,9 @@ Decisões do autor (Brunno Alexcson), tomadas a partir das respostas do professo
 
 | ID | Tipo | Descrição | Decisão |
 |---|---|---|---|
-| INT-MRC-03 | Questão de integração → **Infra** (Pedro) | Tópicos e catálogo | Criar `demanda_cancelada`, `produto_atualizado` e `fornecimento_atualizado`; registrar este serviço como consumidor dos 9 tópicos do §7.3 e como produtor de `modo_negociacao_definido`, `leilao_iniciado` e `mercado.dlt`, com a Negociação como consumidora dos dois primeiros; retirar o Mercado da lista de consumidores de `lance_realizado` no `CONTRACTS.md`; rota `/api/v1/mercado` no gateway para as duas réplicas. Situação: a pedir (a INT-MRC-01 foi fechada em 19/11). |
+| INT-MRC-03 | Questão de integração → **Infra** (Pedro) | Tópicos e catálogo | Criar `demanda_cancelada`, `produto_atualizado` e `fornecimento_atualizado`; registrar este serviço como consumidor dos 9 tópicos do §7.3 e como produtor de `modo_negociacao_definido`, `leilao_iniciado` e `mercado.dlt`, com a Negociação como consumidora dos dois primeiros; retirar o Mercado da lista de consumidores de `lance_realizado` no `CONTRACTS.md`; retirar do `database/01-init.sql` as tabelas de exemplo do schema `mercado` (DG-56); rota `/api/v1/mercado` no gateway para as duas réplicas. Situação: a pedir (a INT-MRC-01 foi fechada em 19/11). |
 | INT-MRC-04 | Questão de integração → **Compra e Demanda** (Lucca) | Ajustes nos contratos | Os pedidos da DG-03, enviados em 17/11 e refeitos em 25/11 nas issues #1 e #2 de `LuccaStuart/portal-b2b-compra-demanda`. A #2 também pede o cancelamento das demandas de produto excluído (DG-47), pergunta se o Demanda expira a demanda (DG-48) e responde a pergunta deles sobre o destino (DG-28). Situação: issues #1 e #2 abertas em 25/11, aguardando resposta. |
-| INT-MRC-06 | Questão de integração → **Banco de Dados** | DDL do schema `mercado` | Validar as tabelas do §6.1, `NUMERIC(18,4)` para dinheiro e `NUMERIC(12,2)` para quantidade (o DR-BD-002 usa inteiro). Situação: pendente. |
-| INT-MRC-07 | Questão de integração → **Autenticação** | Erro e escopos | Formato de erro com `codigo` (mesma pendência da INT-PED-08 e da INT-NEG-07); escopos `BUYER` e `SUPPLIER`. Situação: registrada. |
+| INT-MRC-06 | Questão de integração → **Banco de Dados** | DDL do schema `mercado` | O grupo de Banco entregou o DR-BD-002 (pacote `Portal_B2B_PostgreSQL_17_6`), um modelo em schema único, sem tabelas do Mercado e com quantidade inteira. O Mercado segue o kit (schema `mercado`, roles `svc_mercado` e `portal_ddl`) com migração própria (§5.1), como o Pedidos e o Fornecimento. Pedido ao grupo: validar as tabelas do §6.1, `NUMERIC(18,4)` para dinheiro e `NUMERIC(12,2)` para quantidade. Situação: a responder pelo Teams (o grupo não tem repositório). |
 | INT-MRC-08 | Questão de integração → **UX/UI** | Telas | Vitrine pelo menor preço com ofertas aptas; abertura de direta com quantidade; tela de sugestão com os estados `ABERTA`, `EM_FORMACAO` e "você está no lote"; `contextoProduto` no leilão; saldo da demanda. Situação: a comunicar. |
 | INT-MRC-09 | Questão → **QA** | Gate G1 | Revisar esta ESP. O identificador `ESP-NEG-001` é usado pelo exemplo do QA e pela especificação da Negociação. Situação: a submeter. |
 
@@ -1911,18 +1932,7 @@ Decisões do autor (Brunno Alexcson), tomadas a partir das respostas do professo
 | INT-MRC-01 | Questão de integração → **Negociação** (Caio) | Divergências com a ESP-NEG-001 | Esta ESP define o papel do Mercado no fluxo, apoiada no diagrama: o Mercado "inicia leilões quando necessário" e publica `modo_negociacao_definido` e `leilao_iniciado`; a Negociação fica com "lances e propostas, regras do leilão e definição do vencedor". Ajustes pedidos à Negociação: (a) abrir a direta e o leilão consumindo `modo_negociacao_definido` e `leilao_iniciado`, com o mesmo `negociacaoId`, em vez de criá-los por HTTP (D16, INT-NEG-03); (b) publicar `pedido_temporario_solicitado` por item ao abrir, como já especificado, e só liberar os lances com todas as reservas confirmadas, retirando antes do primeiro lance o item com reserva recusada e recalculando preço inicial, incremento e participações (DG-51); (c) datas pelo sistema (DG-13) em vez de `dataInicio`/`dataFim` do fornecedor (D24); (d) rateio pela participação no valor enviada pelo Mercado (DG-22) em vez do volume (D19, RN-15); (e) incremento mínimo enviado pelo Mercado (DG-20) em vez de "sem incremento" (D22); (f) `demandaId` opcional no lance e no `negociacao_fechada` (DG-27), ausente na D11; (g) saída do lote antes de T1 é do Mercado (DG-18); (h) manter `tipo` e `produtoId` no `negociacao_fechada`. Pontos já alinhados: leilão conjunto, lance no lote inteiro, preço inicial pela soma ponderada, qualquer comprador dá lance, conflito de interesse, sem leilão reverso, deserto, formato `alocacoes`, pedido temporário pedido pela Negociação. Situação: fechada em 19/11: a ESP-NEG-001 v1.2 aceitou (a) a (g) e manteve (h) (INT-NEG-03, D33 a D42; commit `5851451`). |
 | INT-MRC-02 | Questão de integração → **Pedidos** (Daniel) | Pedido na abertura | Respondida em 19/11: um pedido temporário por oferta, sem comprador, com unicidade `(negociacaoId, fornecimentoId)`; efetivar ou cancelar pelo `negociacao_fechada`, com o `demandaId` aceito e ignorado; o próprio pedido temporário é a reserva; gatilho `pedido_temporario_solicitado` da Negociação (DG-37, DG-51); destino informado pelo comprador depois da venda (DG-28). A ESP-PED-001 não muda; a referência à ESP-MRC-001 v0.5 foi atualizada no mesmo dia (commit `8091833`). Situação: fechada. |
 | INT-MRC-05 | Questão de integração → **Fornecimento** (Davi) | Consumo das ofertas e produtos | Registrar o `mercado-service` como consumidor de `produto_cadastrado`, `produto_atualizado`, `fornecimento_criado`, `fornecimento_atualizado` e `estoque_atualizado`. Respondida em 23/11: o contrato de eventos v2.5 do Fornecimento registra o `mercado-service` como consumidor dos 5 eventos, e os exemplos do contrato validam contra os schemas do §7.3. O alinhamento do documento de requisitos e da ESP-PRD-001 deles foi pedido na issue #44 de `davicalvarenga/Sistema-MicServ-SD` e concluído no PR #45 deles (documento de requisitos v0.13, ESP-PRD-001 v2.3); a issue foi fechada em 25/11. Sobre o `grupoId` (issue #35 deles, fechada em 23/11): o Mercado não aplica a trava por grupo na v1 (DG-54). Situação: fechada. |
-
-**13.2 Fora desta versão**
-
-Dúvidas levantadas que não foram decididas nesta versão. Ficam para a próxima iteração ou dependem de outros grupos; nenhuma bloqueia os RFs do §8.
-
-| Tema | Pontos | Situação |
-|---|---|---|
-| Contratos de eventos | Decididos do lado do Mercado (DG-40 a DG-47, DG-53); payloads de `modo_negociacao_definido` e `leilao_iniciado` aceitos pela Negociação em 19/11 (ESP-NEG-001 v1.2); falta a criação dos tópicos pela Infra; o Pedidos não consome eventos do Mercado (INT-MRC-02 fechada) | INT-MRC-03 |
-| Regras do leilão na Negociação | Espera pelas reservas e recálculo do lote aceitos pela Negociação (DG-51; D35 da ESP-NEG-001); fica para depois a trava por grupo econômico (DG-54) | INT-MRC-01, fechada em 19/11 |
-| Regras de dados de outros serviços | Expiração da demanda (Demanda, DG-48); fuso para converter `prazoDesejado` em `dataEntregaDesejada` (Pedidos e Negociação); oferta pausada e segunda oferta do mesmo fornecedor e produto (Fornecimento; professor: "não usual") | Outros grupos |
-| Visibilidade e interface | Decididas as regras do Mercado (DG-49, DG-50); detalhes de tela, avaliação de fornecedores (0 a 5 estrelas), alerta de preço acima do mercado e comparação com preço externo | INT-MRC-08; desejáveis fora da v1 |
-| Plataforma e entrega | Administrador da plataforma; formato `entrega_grupo/`; padrão de erro da turma; DDL oficial; origem das regras citadas no boilerplate do kit | INT-MRC-06, INT-MRC-07, INT-MRC-09 |
+| INT-MRC-07 | Questão de integração → **Autenticação** | Erro e escopos | Respondida em 23/11 pelo Identity, na issue #4 deste repositório (aberta pelo Pedidos e movida para a issue #27 do `Matheus-Allvz/Identity-Service`): `iss` `identity-service`, `aud` `b2b-platform`, RS256 com JWKS, claims `sub`, `tenant_id` e `active_scope`, `view_mode` `SINGLE` nas operações, `CARRIER` sem acesso e `exp` sem tolerância; tudo já está no §7.1. Formato de erro: o Identity usa RFC 9457 (`code`, `correlation_id`) e recomenda que os clientes leiam os dois formatos; o Mercado mantém o do §10 (`codigo`, `correlationId`), como o Pedidos e a Negociação, e não consome erros do Identity. Situação: fechada em 25/11. |
 
 ### 13.1 Casos de borda obrigatórios
 
@@ -1933,7 +1943,7 @@ Dúvidas levantadas que não foram decididas nesta versão. Ficam para a próxim
 | Mensagem duplicada **e** inválida | A validação vem antes da deduplicação: vai para a DLT de novo (RN-31, RN-32). |
 | Campo de chave/ID com tipo inesperado | Na API: `422 VALIDACAO_INVALIDA`. No consumo: mensagem inválida. Na chave da DLT, `eventId` não string é convertido com `str`; ausente, nulo ou vazio → `"desconhecido"` (§7.4). |
 | Data/hora sem fuso horário | Na API e no consumo: inválida. `clock.now()` sem fuso: tratar como UTC. |
-| Falha da porta de publicação / banco | Banco: `RepositorioIndisponivel` → 503 na API e novas tentativas no consumo (RN-31). `publish` dentro da transação: no adaptador real é a gravação na outbox, que falha junto com a transação; falhas do envio ao broker ficam com o publicador da outbox (§5.1). Falha ao publicar na DLT no adaptador real: o offset não é confirmado e a mensagem é reprocessada. |
+| Falha da porta de publicação / banco | Banco: `RepositorioIndisponivel` → 503 na API; no consumo, o handler propaga e a mensagem é reentregue a cada 5 s, sem DLT (RN-31). Outra exceção → 500 na API; no consumo, 3 execuções e DLT. `publish` dentro da transação: no adaptador real é a gravação na outbox, que falha junto com a transação; falhas do envio ao broker ficam com o publicador da outbox (§5.1). Falha ao publicar na DLT no adaptador real: o offset não é confirmado e a mensagem é reprocessada. |
 | Rotas e métodos fora do contrato | Resposta padrão do framework (§10). |
 | Número com mais de 2 casas ou como string | `422 VALIDACAO_INVALIDA` na API; mensagem inválida no consumo. |
 | Evento com instante igual ao gravado | Ignorado (RN-01, RN-02). |
@@ -1943,6 +1953,18 @@ Dúvidas levantadas que não foram decididas nesta versão. Ficam para a próxim
 | `negociacao_fechada` republicado (mesmo `negociacaoId`, outro `eventId`) | Ignorado: só o primeiro é aplicado (RN-25, DG-53). |
 | Item do lote com reserva recusada depois de T1 | Regra da Negociação: sai do lote antes do primeiro lance; o `negociacao_fechada` traz só os itens restantes (DG-51, PR-01). |
 | Janela vencida antes de `executar_prazos` rodar | Aceite, alteração e saída já são recusados comparando com `agora` (RN-17, RN-19); o lote fecha na próxima execução. |
+
+### 13.2 Fora desta versão
+
+Dúvidas levantadas que não foram decididas nesta versão. Ficam para a próxima iteração ou dependem de outros grupos; nenhuma bloqueia os RFs do §8.
+
+| Tema | Pontos | Situação |
+|---|---|---|
+| Contratos de eventos | Decididos do lado do Mercado (DG-40 a DG-47, DG-53); payloads de `modo_negociacao_definido` e `leilao_iniciado` aceitos pela Negociação em 19/11 (ESP-NEG-001 v1.2); falta a criação dos tópicos pela Infra; o Pedidos não consome eventos do Mercado (INT-MRC-02 fechada) | INT-MRC-03 |
+| Regras do leilão na Negociação | Espera pelas reservas e recálculo do lote aceitos pela Negociação (DG-51; D35 da ESP-NEG-001); fica para depois a trava por grupo econômico (DG-54) | INT-MRC-01, fechada em 19/11 |
+| Regras de dados de outros serviços | Expiração da demanda (Demanda, DG-48); fuso para converter `prazoDesejado` em `dataEntregaDesejada` (Pedidos e Negociação); oferta pausada e segunda oferta do mesmo fornecedor e produto (Fornecimento; professor: "não usual") | Outros grupos |
+| Visibilidade e interface | Decididas as regras do Mercado (DG-49, DG-50); detalhes de tela, avaliação de fornecedores (0 a 5 estrelas), alerta de preço acima do mercado e comparação com preço externo | INT-MRC-08; desejáveis fora da v1 |
+| Plataforma e entrega | Administrador da plataforma; formato `entrega_grupo/`; padrão de erro da turma; DDL oficial; origem das regras citadas no boilerplate do kit | INT-MRC-06, INT-MRC-09 (INT-MRC-07 fechada em 25/11) |
 
 ## 14. Checklist de prontidão (Definition of Ready) — preenchido pelo QA
 
@@ -1959,8 +1981,8 @@ Pré-conferência do autor antes do gate G1; o QA confirma ou desmarca cada item
 - [x] Todo RNF tem métrica, limiar e forma de verificação.
 - [x] Matriz de rastreabilidade completa (nenhum RF sem CA, nenhum CA órfão).
 - [x] Não há palavras vagas sem quantificação.
-- [ ] Seção 13 sem questões abertas e tabela 13.1 (casos de borda) toda decidida. A tabela 13.1 está decidida; continuam abertas as questões de integração INT-MRC-03, INT-MRC-04 e INT-MRC-06 a INT-MRC-09 (a INT-MRC-01 e a INT-MRC-02 foram fechadas em 19/11; a INT-MRC-05, em 25/11). Neste serviço vale o contrato desta ESP; os CAs usam dublês dos serviços parceiros.
-- [x] Comentários `# DECISÃO:` da última geração (se houver) analisados e incorporados como regra (não houve geração anterior).
+- [ ] Seção 13 sem questões abertas e tabela 13.1 (casos de borda) toda decidida. A tabela 13.1 está decidida; continuam abertas as questões de integração INT-MRC-03, INT-MRC-04, INT-MRC-06, INT-MRC-08 e INT-MRC-09 (a INT-MRC-01 e a INT-MRC-02 foram fechadas em 19/11; a INT-MRC-05 e a INT-MRC-07, em 25/11). Neste serviço vale o contrato desta ESP; os CAs usam dublês dos serviços parceiros.
+- [x] Perguntas da última geração (diretiva 4 do §1), se houver, respondidas e incorporadas como regra (não houve geração anterior).
 
 ## 15. Histórico de versões
 
@@ -1972,3 +1994,4 @@ Pré-conferência do autor antes do gate G1; o QA confirma ou desmarca cada item
 | 0.4 | 2026-11-18 | Brunno Alexcson | Decisões DG-37 a DG-50: propostas ao Pedidos para o pedido temporário; contratos de eventos fechados do lado do Mercado; prazo vencido tira a demanda do balanço sem expirá-la (RN-10, RF-12; sai a situação `EXPIRADA`); vitrine e balanço públicos com totais; INT-MRC-02 e INT-MRC-04 atualizadas; §13.2 revisada. |
 | 0.5 | 2026-11-19 | Brunno Alexcson | Decisões DG-51 a DG-54, alinhadas com Pedidos e Negociação e com o diagrama: o Mercado continua formando o lote e publicando `leilao_iniciado`; a Negociação pede o pedido temporário de cada oferta com `pedido_temporario_solicitado`, na direta e no leilão, e só libera os lances com as reservas confirmadas (DG-51, DG-52); fechamento republicado é ignorado (DG-53); `grupoId` ignorado na v1 (DG-54); `tipo` e `produtoId` obrigatórios no `negociacao_fechada`; PR-01 reescrita; DG-28 e DG-37 a DG-39 revistas; INT-MRC-01 a INT-MRC-03 e INT-MRC-05 atualizadas (INT-MRC-02 fechada); RNF-06 corrigido; histórico em ordem. |
 | 0.6 | 2026-11-22 | Brunno Alexcson | DG-55: IDs de negócio (`produtoId`, `fornecimentoId`, `fornecedorId`, `compradorId`, `demandaId`, `ocorrenciaId`) limitados a 64 caracteres na API, no consumo e nos schemas de `docs/mercado/contratos/`, alinhado com a Negociação e o Pedidos (INT-NEG-12). |
+| 0.7 | 2026-11-25 | Brunno Alexcson | Alinhamento do dia 25/11: INT-MRC-01, INT-MRC-02 e INT-MRC-05 fechadas e separadas das abertas no §13; pedidos ao Compra e Demanda nas issues #1 e #2 (DG-03, DG-47, DG-48, INT-MRC-04); `mercado.dlt` alinhada à biblioteca do kit (3 execuções, `stackTrace` em `PROCESSAMENTO_FALHOU`); execução no kit pelo `compose.mercado.yml`; diretivas 4 (perguntar em vez de supor) e 7; árvore do §5 com `tests/`, `demo/`, `.dockerignore` e `.gitignore`. Revisão para a geração: métodos `obter_modelo`, `salvar_modelo`, `obter_situacao_balanco` e `salvar_situacao_balanco` nas portas; `correlationId` na sugestão; ocorrência de modelo cancelado ignorada (RN-08, CA-13, DG-04); lote sem itens no §6.2; adaptadores (falhas de conexão, polling da outbox, DLT fora da outbox), métricas e migração; envelope sem campos extras no §7.3; DG-31 e DG-40 atualizadas; §13.2 depois do §13.1. Decisões: banco indisponível no consumo como no Pedidos (DG-57, RN-31, CA-57); tabelas de exemplo do kit apagadas pela migração (DG-56); INT-MRC-06 atualizada e INT-MRC-07 fechada; IDs dos eventos publicados com `pattern` `\S`; `JWKS_URL` do kit pelo serviço `gateway`. |

@@ -4,22 +4,23 @@ Responsável: Brunno Alexcson. Porta `8105`, rotas `/api/v1/mercado`, schema Pos
 
 O serviço acompanha, por produto, a oferta disponível e a demanda aberta do portal e decide como cada compra é negociada: negociação direta entre um comprador e a oferta que ele escolher, ou leilão em lote quando a demanda supera a oferta e os fornecedores aceitam a sugestão de leilão. É o bloco 5 do diagrama da arquitetura ("calcula oferta vs demanda, define modo de negociação, inicia leilões quando necessário").
 
-## Situação em 19/11/2026 (v0.5)
+## Situação em 25/11/2026 (v0.7)
 
 | Item | Situação |
 |---|---|
-| Especificação (ESP-MRC-001 v0.5) | Rascunho no modelo ERS-LLM v1.2 do QA, antes do gate G1; 17 RFs, 59 CAs, decisões DG-01 a DG-54 |
+| Especificação (ESP-MRC-001 v0.7) | Rascunho no modelo ERS-LLM v1.2 do QA, antes do gate G1; 17 RFs, 59 CAs, decisões DG-01 a DG-57 |
 | Contratos de eventos | Schemas JSON e exemplos validados para os 12 tópicos; conferidos contra os contratos do Pedidos e do Fornecimento |
 | Código (`services/mercado-service/`) | Não iniciado; segue a estrutura do `pedidos-service` |
 | Alinhamento com Pedidos | Fechado em 19/11 (INT-MRC-02): a ESP-PED-001 não muda |
 | Alinhamento com Fornecimento e Produtos | Fechado em 25/11 (INT-MRC-05): o contrato de eventos v2.5 (23/11) registra o Mercado como consumidor dos 5 eventos de produto e oferta; o documento de requisitos (v0.13) e a ESP-PRD-001 (v2.3) foram alinhados no PR #45 e a issue #44 de `davicalvarenga/Sistema-MicServ-SD` foi fechada |
 | Alinhamento com Compra e Demanda | Issues [#1](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/1) e [#2](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/2) abertas em 25/11 (INT-MRC-04), **aguardando resposta do Lucca** |
 | Alinhamento com Negociação | Fechado em 19/11 (INT-MRC-01): a ESP-NEG-001 v1.2 aceitou todos os ajustes (INT-NEG-03, D33 a D42) |
+| Alinhamento com Autenticação | Fechado em 25/11 (INT-MRC-07): a resposta do Identity na issue #4 (23/11) já está no §7.1 da ESP; o formato de erro do Mercado continua o do §10 |
 | Status Report | Decisões marcadas com "Status Report: sim" na seção 13 da ESP |
 
 ## Documentos
 
-- [Especificação ESP-MRC-001](requisitos.md): regras, rotas, eventos, erros, critérios de aceitação e decisões DG-01 a DG-54, pendências de integração INT-MRC-01 a INT-MRC-09 e pontos fora desta versão (seção 13).
+- [Especificação ESP-MRC-001](requisitos.md): regras, rotas, eventos, erros, critérios de aceitação e decisões DG-01 a DG-57, pendências de integração INT-MRC-01 a INT-MRC-09 e pontos fora desta versão (seção 13).
 - [Contratos de eventos](contratos/): um `<topico>.schema.json` (JSON Schema 2020-12) e um `<topico>.exemplo.json` por tópico consumido e publicado.
 
 ## Como o serviço funciona
@@ -88,9 +89,8 @@ Segue o diagrama: o Mercado inicia os leilões e publica `modo_negociacao_defini
 | Grupo | Pendência |
 |---|---|
 | Negociação | Código consumindo `leilao_iniciado` e `modo_negociacao_definido` e teste com o Mercado (prazo: 30/11); na ESP-NEG-001, fechar a INT-NEG-12 (issue #7) e atualizar as referências |
-| Infra | Criar `demanda_cancelada`, `produto_atualizado` e `fornecimento_atualizado`; registrar o Mercado como produtor e consumidor dos tópicos; retirar o Mercado dos consumidores de `lance_realizado`; rota do gateway |
+| Infra | Criar `demanda_cancelada`, `produto_atualizado` e `fornecimento_atualizado`; registrar o Mercado como produtor e consumidor dos tópicos; retirar o Mercado dos consumidores de `lance_realizado`; retirar do `01-init.sql` as tabelas de exemplo do schema `mercado` (DG-56); rota do gateway |
 | Compra e Demanda | Aguardando resposta das duas issues abertas em 25/11 (INT-MRC-04):<br>[#1](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/1) Mercado × Compra e Demanda: confirmar os 3 eventos de demanda e alinhar preço máximo, UF, cidade e tamanho dos IDs<br>[#2](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/2) Mercado × Compra e Demanda: produto excluído, demanda recorrente, casas decimais e chave das mensagens |
-| Banco de Dados | DDL do schema `mercado` e quantidade decimal |
-| Autenticação | Padrão de erro com `codigo` |
+| Banco de Dados | Validar as tabelas do §6.1 e os tipos decimais (o DR-BD-002 não tem tabelas do Mercado); responder pelo Teams (INT-MRC-06) |
 | UX/UI | Telas de vitrine, sugestão de leilão e contexto do leilão |
 | QA | Revisar a ESP no gate G1 |
