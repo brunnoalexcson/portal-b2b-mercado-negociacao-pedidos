@@ -88,7 +88,7 @@ Segue o diagrama: o Mercado inicia os leilões e publica `modo_negociacao_defini
 | Negociação | Itens da INT-MRC-01 acima |
 | Infra | Criar `demanda_cancelada`, `produto_atualizado` e `fornecimento_atualizado`; registrar o Mercado como produtor e consumidor dos tópicos; retirar o Mercado dos consumidores de `lance_realizado`; rota do gateway |
 | Compra e Demanda | Ajustes pedidos em 17/11 (`precoMaximo`, `frequencia`, `ocorrenciaId` no cancelamento, edição); cancelar demandas de produto excluído |
-| Fornecimento | Registrar o Mercado como consumidor dos eventos de produto e oferta |
+| Fornecimento | Atendida em 23/11: o Mercado está registrado como consumidor dos eventos de produto e oferta no contrato v2.5. Falta só o alinhamento da documentação deles, pedido na issue #44 de `davicalvarenga/Sistema-MicServ-SD` |
 | Banco de Dados | DDL do schema `mercado` e quantidade decimal |
 | Autenticação | Padrão de erro com `codigo` |
 | Pedidos | Atualizar a referência para a ESP-MRC-001 v0.5 |
