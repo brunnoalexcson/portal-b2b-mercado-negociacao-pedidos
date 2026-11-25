@@ -13,7 +13,8 @@ O serviço acompanha, por produto, a oferta disponível e a demanda aberta do po
 | Código (`services/mercado-service/`) | Não iniciado; segue a estrutura do `pedidos-service` |
 | Alinhamento com Pedidos | Fechado em 19/11 (INT-MRC-02): a ESP-PED-001 não muda |
 | Alinhamento com Fornecimento e Produtos | Fechado em 25/11 (INT-MRC-05): o contrato de eventos v2.5 (23/11) registra o Mercado como consumidor dos 5 eventos de produto e oferta; o documento de requisitos (v0.13) e a ESP-PRD-001 (v2.3) foram alinhados no PR #45 e a issue #44 de `davicalvarenga/Sistema-MicServ-SD` foi fechada |
-| Alinhamento com Negociação | Proposta de 19/11 na INT-MRC-01, **a confirmar com o Caio** |
+| Alinhamento com Compra e Demanda | Issues [#1](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/1) e [#2](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/2) abertas em 25/11 (INT-MRC-04), **aguardando resposta do Lucca** |
+| Alinhamento com Negociação | Fechado em 19/11 (INT-MRC-01): a ESP-NEG-001 v1.2 aceitou todos os ajustes (INT-NEG-03, D33 a D42) |
 | Status Report | Decisões marcadas com "Status Report: sim" na seção 13 da ESP |
 
 ## Documentos
@@ -74,23 +75,22 @@ Segue o diagrama: o Mercado inicia os leilões e publica `modo_negociacao_defini
 | Vencedor, rateio e `negociacao_fechada` | Negociação |
 | Destino da entrega | O comprador informa no Pedidos depois da venda |
 
-**Pedidos à Negociação** (INT-MRC-01)
+**Combinado com a Negociação** (INT-MRC-01, aceito na ESP-NEG-001 v1.2 em 19/11)
 - Abrir a direta e o leilão consumindo `modo_negociacao_definido` e `leilao_iniciado`, em vez de criá-los por HTTP.
 - Esperar as reservas antes dos lances e recalcular o lote se um item sair.
 - Datas do leilão pelo sistema, rateio pela participação no valor e incremento mínimo enviados pelo Mercado.
 - `demandaId` opcional no lance e no `negociacao_fechada`.
 
-**Pedidos**: nada muda na ESP-PED-001; falta só atualizar a referência para a ESP-MRC-001 v0.5.
+**Pedidos**: nada muda na ESP-PED-001; a referência à ESP-MRC-001 v0.5 foi atualizada em 19/11 (commit `8091833`).
 
 ## Pendências com outros grupos
 
 | Grupo | Pendência |
 |---|---|
-| Negociação | Itens da INT-MRC-01 acima |
+| Negociação | Código consumindo `leilao_iniciado` e `modo_negociacao_definido` e teste com o Mercado (prazo: 30/11); na ESP-NEG-001, fechar a INT-NEG-12 (issue #7) e atualizar as referências |
 | Infra | Criar `demanda_cancelada`, `produto_atualizado` e `fornecimento_atualizado`; registrar o Mercado como produtor e consumidor dos tópicos; retirar o Mercado dos consumidores de `lance_realizado`; rota do gateway |
-| Compra e Demanda | Ajustes pedidos em 17/11 (`precoMaximo`, `frequencia`, `ocorrenciaId` no cancelamento, edição); cancelar demandas de produto excluído |
+| Compra e Demanda | Aguardando resposta das duas issues abertas em 25/11 (INT-MRC-04):<br>[#1](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/1) Mercado × Compra e Demanda: confirmar os 3 eventos de demanda e alinhar preço máximo, UF, cidade e tamanho dos IDs<br>[#2](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/2) Mercado × Compra e Demanda: produto excluído, demanda recorrente, casas decimais e chave das mensagens |
 | Banco de Dados | DDL do schema `mercado` e quantidade decimal |
 | Autenticação | Padrão de erro com `codigo` |
-| Pedidos | Atualizar a referência para a ESP-MRC-001 v0.5 |
 | UX/UI | Telas de vitrine, sugestão de leilão e contexto do leilão |
 | QA | Revisar a ESP no gate G1 |
