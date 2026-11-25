@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/contratos/negociacao/leilao_iniciado.schema.json",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/negociacao/contratos/leilao_iniciado.schema.json",
   "title": "leilao_iniciado",
   "description": "Consumido pelo negociacao-service (RF-01): o mercado-service publica quando fecha o lote de uma sugestão de leilão (ESP-MRC-001 RF-10). Abre o leilão com o mesmo negociacaoId. Lista só os campos usados; os demais (sugestaoId, unidade, origem) são aceitos e ignorados. encerraEm > iniciaEm e fornecimentoId sem repetição são validados pelo serviço. Chave: negociacaoId.",
   "type": "object",

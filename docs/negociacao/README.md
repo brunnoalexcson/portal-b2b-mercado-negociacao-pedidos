@@ -16,8 +16,8 @@ O serviço conduz as negociações que o Mercado define: leilões em que comprad
 
 ## Documentos
 
-- [Especificação ESP-NEG-001](../especificacoes/ESP-NEG-001_Negociacao.md): regras, rotas, eventos, erros, critérios de aceitação e decisões (seção 13).
-- [Contratos de eventos](../contratos/negociacao/): um `<topico>.schema.json` (JSON Schema 2020-12) e um `<topico>.exemplo.json` por tópico.
+- [Especificação ESP-NEG-001](requisitos.md): regras, rotas, eventos, erros, critérios de aceitação e decisões (seção 13).
+- [Contratos de eventos](contratos/): um `<topico>.schema.json` (JSON Schema 2020-12) e um `<topico>.exemplo.json` por tópico.
 - Decisões de arquitetura: [ADR 0001: dinheiro com 2 casas na API e 4 no banco](adr/0001-dinheiro-2-casas-na-api-4-no-banco.md) e [ADR 0002: leilão conjunto na v1](adr/0002-leilao-conjunto-na-v1.md).
 
 ## Como o serviço funciona

@@ -10,7 +10,7 @@
 | Serviço / Bounded context | `negociacao-service` (microsserviço 6 do Portal B2B Distribuído): Negociação e Leilão. Porta `8106`, rotas `/api/v1/negociacoes`, schema PostgreSQL `negociacao`, role `svc_negociacao` |
 | Autores (PO / Dev / QA) | PO e Dev: Caio Almeida Oliveira (grupo Mercado, Negociação/Leilão e Pedidos). QA: Grupo de Teste e Qualidade (revisão no gate G1) |
 | Data | 2026-11-19 |
-| Documentos relacionados | ESP-MRC-001 v0.5 (`docs/mercado/requisitos.md`, revisão `5c8e8a2`); ESP-PED-001 v2.1 (`docs/pedidos/requisitos.md`, revisão `8091833`); contratos de eventos em `docs/contratos/negociacao/`; kit de Infraestrutura (`CONTRACTS.md` e `ORIENTACOES-ARQUITETURA-GRUPOS.md`, revisão `630515c`); Identity-Service (revisão `800f2d8`); DR-BD-002 v1.0; modelo ERS-LLM v1.2 do QA (revisão `efc05b6`) |
+| Documentos relacionados | ESP-MRC-001 v0.5 (`docs/mercado/requisitos.md`, revisão `5c8e8a2`); ESP-PED-001 v2.1 (`docs/pedidos/requisitos.md`, revisão `8091833`); contratos de eventos em `docs/negociacao/contratos/`; kit de Infraestrutura (`CONTRACTS.md` e `ORIENTACOES-ARQUITETURA-GRUPOS.md`, revisão `630515c`); Identity-Service (revisão `800f2d8`); DR-BD-002 v1.0; modelo ERS-LLM v1.2 do QA (revisão `efc05b6`) |
 
 ## 1. Diretivas para a LLM geradora
 
@@ -609,7 +609,7 @@ Sem corpo, ou corpo `{}`; qualquer outro corpo → `422 VALIDACAO_INVALIDA`. Res
 
 ### 7.3 Eventos consumidos
 
-Envelope (kit, `CONTRACTS.md`): `eventId`, `eventType` (igual ao tópico), `eventVersion` (`"1.0"`), `timestamp`, `source`, `correlationId`, `aggregateId` (igual à chave Kafka) e `payload` (objeto). Campos adicionais no `payload` são aceitos e ignorados. Os schemas estão em `docs/contratos/negociacao/<topico>.schema.json` e listam só os campos que este serviço usa.
+Envelope (kit, `CONTRACTS.md`): `eventId`, `eventType` (igual ao tópico), `eventVersion` (`"1.0"`), `timestamp`, `source`, `correlationId`, `aggregateId` (igual à chave Kafka) e `payload` (objeto). Campos adicionais no `payload` são aceitos e ignorados. Os schemas estão em `docs/negociacao/contratos/<topico>.schema.json` e listam só os campos que este serviço usa.
 
 | Tópico | Produtor | Chave | Ação | Em caso de mensagem inválida |
 |---|---|---|---|---|
@@ -756,7 +756,7 @@ A chave Kafka (`key` de `publish`) é sempre igual ao `aggregateId`.
 | `negociacao_fechada` | Negociação chega a estado final (RF-03, RF-04, RF-06, RF-08, RF-09, RF-10) | `negociacaoId` | `negociacaoId`, `tipo`, `status`, `compradorId` (texto só em `ENCERRADO`; `null` nos demais), `demandaId` (leilão `ENCERRADO`: o do lance vencedor, ou `null`; `null` nos demais), `produtoId`, `alocacoes[]` {`fornecimentoId`, `fornecedorId`, `pedidoId`, `quantidade`, `valorUnitario`, `valorTotal`} (vazia fora de `ENCERRADO`) | Pedidos, Mercado |
 | `negociacao.dlt` | Mensagem consumida inválida ou com falha após 4 execuções (RF-15) | `aggregateId` original se for string de 1 a 128 caracteres; senão `eventId` original convertido com `str` se presente e não vazio; senão `"desconhecido"` | `topicoOrigem`, `originalEvent` (mensagem recebida, intacta), `error` (`"EVENTO_INVALIDO"` ou `"PROCESSAMENTO_FALHOU"`), `detalhe` (motivo, 1–500 caracteres), `stackTrace` (`""`), `failedAtAttempt` (1 a 4) | operação, QA |
 
-Exemplos (iguais a `docs/contratos/negociacao/<topico>.exemplo.json`):
+Exemplos (iguais a `docs/negociacao/contratos/<topico>.exemplo.json`):
 
 `pedido_temporario_solicitado`:
 
@@ -890,9 +890,9 @@ Os critérios usam esta massa. `token(ESCOPO, EMPRESA)` é um JWT RS256 assinado
 | OF-D, OF-E (ofertas) | `34000000-0000-4000-8000-000000000006` e `34000000-0000-4000-8000-000000000005`, ambas de FORN-C |
 | PT-A, PT-B, PT-D | pedidos temporários `32000000-0000-4000-8000-000000000001`, `…000000000002`, `…000000000003` |
 | DEM-X, DEM-Y (demandas no Mercado) | `36000000-0000-4000-8000-000000000001` (de COMP-X) e `36000000-0000-4000-8000-000000000002` (de COMP-Y) |
-| Leilão L1 | `31000000-0000-4000-8000-000000000001`, aberto às `12:00:00` pelo `leilao_iniciado` do §7.3 (igual a `docs/contratos/negociacao/leilao_iniciado.exemplo.json`): OF-A (5.00 × 120.00 = 600.00, participação 0.2353) e OF-B (15.00 × 130.00 = 1950.00, participação 0.7647), `precoInicial` 2550.00, `incrementoMinimo` 25.50, `dataInicio` 12:00, `dataFim` 15:00, `correlationId` `"teste-neg-01"` |
+| Leilão L1 | `31000000-0000-4000-8000-000000000001`, aberto às `12:00:00` pelo `leilao_iniciado` do §7.3 (igual a `docs/negociacao/contratos/leilao_iniciado.exemplo.json`): OF-A (5.00 × 120.00 = 600.00, participação 0.2353) e OF-B (15.00 × 130.00 = 1950.00, participação 0.7647), `precoInicial` 2550.00, `incrementoMinimo` 25.50, `dataInicio` 12:00, `dataFim` 15:00, `correlationId` `"teste-neg-01"` |
 | "L1 ABERTO" | L1 com as reservas de OF-A (PT-A) e de OF-B (PT-B) confirmadas às `12:01:00`, sem lances |
-| Direta D1 | `31000000-0000-4000-8000-000000000002`, aberta às `12:00:00` pelo `modo_negociacao_definido` do §7.3 (igual a `docs/contratos/negociacao/modo_negociacao_definido.exemplo.json`): COMP-X, OF-B de FORN-B, `quantidade` 10.00, preço da oferta 130.00, `correlationId` `"teste-neg-02"` |
+| Direta D1 | `31000000-0000-4000-8000-000000000002`, aberta às `12:00:00` pelo `modo_negociacao_definido` do §7.3 (igual a `docs/negociacao/contratos/modo_negociacao_definido.exemplo.json`): COMP-X, OF-B de FORN-B, `quantidade` 10.00, preço da oferta 130.00, `correlationId` `"teste-neg-02"` |
 
 Quando um CA compara uma resposta com um exemplo do §7, os identificadores gerados pelo serviço (`lanceId`, `propostaId`, `eventId`) são comparados com os valores realmente devolvidos, e não com os UUIDs ilustrativos do exemplo; `negociacaoId` vem do evento do Mercado. "Confirmar a reserva de X com PT" significa entregar ao handler um `pedido_atualizado` com `negociacaoId` da negociação, `fornecimentoId` X, `pedidoId` PT, `status` `"CRIADO"` e `reservaSituacao` `"CONFIRMADA"` (eventId novo). "Recusar a reserva" é igual, com `status` `"CANCELADO"` e `reservaSituacao` `"RECUSADA"`. "Abrir o leilão Ln com itens …" significa entregar ao handler um `leilao_iniciado` igual ao de L1, com eventId novo, `negociacaoId` `31000000-0000-4000-8000-00000000000n` e os itens, `precoInicial` e `incrementoMinimo` indicados.
 
@@ -907,7 +907,7 @@ Quando um CA compara uma resposta com um exemplo do §7, os identificadores gera
 # CA-01
 Cenário: Leilão aberto pelo Mercado
   Dado o relógio em 12:00:00
-  Quando o handler recebe o leilao_iniciado de docs/contratos/negociacao/leilao_iniciado.exemplo.json
+  Quando o handler recebe o leilao_iniciado de docs/negociacao/contratos/leilao_iniciado.exemplo.json
   Então GET /api/v1/negociacoes/L1 por token(SUPPLIER, FORN-C) responde 200 com status "AGUARDANDO_RESERVAS", produtoId P, dataInicio "2026-11-20T12:00:00.000Z", dataFim "2026-11-20T15:00:00.000Z", quantidadeTotal 20.00, precoInicial 2550.00, incrementoMinimo 25.50, melhorLance null, totalLances 0, compradorId null, criadoEm "2026-11-20T12:00:00.000Z" e acoesPermitidas []
   E ofertas tem, nesta ordem, OF-A (fornecedorId FORN-A, quantidade 5.00, precoUnitario 120.00, valorItem 600.00, participacao 0.2353, situacao "PENDENTE") e OF-B (FORN-B, 15.00, 130.00, 1950.00, 0.7647, "PENDENTE")
   E foram publicadas exatamente 2 mensagens em "pedido_temporario_solicitado", nesta ordem, ambas com chave L1 e correlationId "teste-neg-01":
@@ -941,7 +941,7 @@ Cenário: leilao_iniciado inválido
 # CA-04
 Cenário: Negociação direta aberta pelo Mercado
   Dado o relógio em 12:00:00
-  Quando o handler recebe o modo_negociacao_definido de docs/contratos/negociacao/modo_negociacao_definido.exemplo.json
+  Quando o handler recebe o modo_negociacao_definido de docs/negociacao/contratos/modo_negociacao_definido.exemplo.json
   Então GET /api/v1/negociacoes/D1 por token(BUYER, COMP-X) responde 200 igual ao exemplo "Detalhe de negociação direta" do §7.2
   E foi publicada exatamente 1 mensagem, em "pedido_temporario_solicitado", com chave D1, correlationId "teste-neg-02" e payload {negociacaoId D1, tipo "VENDA_DIRETA", fornecimentoId OF-B, fornecedorId FORN-B, produtoId P, quantidade 10.00, precoUnitario 130.00}
   E GET /api/v1/negociacoes/D1/propostas tem 1 item com autor "SUPPLIER", precoUnitario 130.00, sequencia 1 e criadoEm "2026-11-20T12:00:00.000Z"
@@ -1125,7 +1125,7 @@ Cenário: Leilão conjunto encerrado com vencedor
   E o relógio em 15:00:00
   Quando executar_prazos é chamado
   Então GET /api/v1/negociacoes/L1 por token(BUYER, COMP-Y) mostra status "ENCERRADO", compradorId COMP-Y e encerradoEm "2026-11-20T15:00:00.000Z"
-  E foi publicada exatamente 1 mensagem em "negociacao_fechada" com chave L1 e payload igual ao de docs/contratos/negociacao/negociacao_fechada.exemplo.json: compradorId COMP-Y, demandaId DEM-Y e alocacoes [{OF-A, FORN-A, PT-A, 5.00, valorUnitario 122.36, valorTotal 611.78}, {OF-B, FORN-B, PT-B, 15.00, valorUnitario 132.55, valorTotal 1988.22}]
+  E foi publicada exatamente 1 mensagem em "negociacao_fechada" com chave L1 e payload igual ao de docs/negociacao/contratos/negociacao_fechada.exemplo.json: compradorId COMP-Y, demandaId DEM-Y e alocacoes [{OF-A, FORN-A, PT-A, 5.00, valorUnitario 122.36, valorTotal 611.78}, {OF-B, FORN-B, PT-B, 15.00, valorUnitario 132.55, valorTotal 1988.22}]
 
 # CA-21
 Cenário: Leilão aberto sem lances
@@ -1438,7 +1438,7 @@ Cenário: Cinco entregas do mesmo evento
 
 # CA-47
 Cenário: Mensagem inválida vai para a DLT
-  Quando o handler de pedido_atualizado recebe o originalEvent de docs/contratos/negociacao/negociacao.dlt.exemplo.json (sem payload)
+  Quando o handler de pedido_atualizado recebe o originalEvent de docs/negociacao/contratos/negociacao.dlt.exemplo.json (sem payload)
   Então o handler não lança exceção
   E é publicada 1 mensagem em "negociacao.dlt" com chave PT-A e payload {topicoOrigem "pedido_atualizado", originalEvent igual à mensagem recebida, error "EVENTO_INVALIDO", detalhe não vazio, stackTrace "", failedAtAttempt 1}
   Quando o handler recebe a mesma mensagem de novo
@@ -1570,7 +1570,7 @@ Respostas fora do catálogo: rota inexistente (404) e método não permitido (40
 |---|---|---|---|---|
 | RNF-01 | Adequação funcional — exatidão | Aritmética monetária com `Decimal` e saída com 2 casas. | Lote de 1.00 × 0.10 e 1.00 × 0.20 (preço inicial 0.30) → lance 0.30 aceito e alocações 0.09 e 0.21; lance `2550` devolvido como `2550.00`; soma das alocações = lance vencedor em 100% dos encerramentos. | CA-51 |
 | RNF-02 | Interoperabilidade | Formato único de erro. | 100% das respostas 4xx e 5xx de negócio em `application/problem+json` com os 8 campos do §10. | CA-52 |
-| RNF-03 | Confiabilidade — ordenação | Eventos da mesma negociação na mesma partição e envelope do kit. | 100% das mensagens publicadas (exceto DLT) com `key == aggregateId == negociacaoId`, `eventType` = tópico, `eventVersion` `"1.0"`, `source` `"negociacao-service"`, `timestamp` = relógio e `eventId` UUID distinto; 100% válidas contra `docs/contratos/negociacao/<topico>.schema.json`. | CA-53 |
+| RNF-03 | Confiabilidade — ordenação | Eventos da mesma negociação na mesma partição e envelope do kit. | 100% das mensagens publicadas (exceto DLT) com `key == aggregateId == negociacaoId`, `eventType` = tópico, `eventVersion` `"1.0"`, `source` `"negociacao-service"`, `timestamp` = relógio e `eventId` UUID distinto; 100% válidas contra `docs/negociacao/contratos/<topico>.schema.json`. | CA-53 |
 | RNF-04 | Manutenibilidade — modularidade | Dependências permitidas e estado só nas portas. | Nenhum import fora do §5 nos módulos de domínio; duas aplicações de `create_app` com repositórios diferentes não compartilham negociações. | CA-54 |
 | RNF-05 | Confiabilidade — idempotência do consumidor | Reentrega não repete efeito, com o serviço real. | 5 entregas do mesmo `pedido_atualizado` `RECUSADA` no Redpanda → 1 `negociacao_fechada` e 1 linha em `processed_events`. | CA-55 |
 | RNF-06 | Confiabilidade — concorrência | Lances serializados com duas réplicas. | 50 lances concorrentes, com valores distintos de 2550.00 a 2599.00, enviados às duas réplicas pelo gateway → sequências aceitas 1..n sem buracos, cada lance aceito maior que o anterior, melhor lance = maior valor aceito, 0 respostas 5xx. | CA-56 |
@@ -1600,8 +1600,8 @@ Cenário: Formato de erro
 Cenário: Envelope, chave e schema
   Para cada mensagem publicada nos CA-01 a CA-50, exceto em "negociacao.dlt"
   Então key == aggregateId == payload.negociacaoId, eventType é o tópico, eventVersion "1.0", source "negociacao-service", timestamp igual ao relógio, eventId UUID diferente dos demais
-  E a mensagem é válida contra docs/contratos/negociacao/<topico>.schema.json
-  E cada arquivo docs/contratos/negociacao/<topico>.exemplo.json é válido contra o schema do mesmo tópico
+  E a mensagem é válida contra docs/negociacao/contratos/<topico>.schema.json
+  E cada arquivo docs/negociacao/contratos/<topico>.exemplo.json é válido contra o schema do mesmo tópico
 
 # CA-54
 Cenário: Dependências e isolamento
@@ -1790,6 +1790,6 @@ Pré-conferência do autor antes do gate G1; o QA confirma ou desmarca cada item
 
 | Versão | Data | Autor | Mudança |
 |---|---|---|---|
-| 1.0 | 2026-11-17 | Caio Almeida Oliveira | Criação, a partir das decisões D1 a D30 do autor e das regras do professor (08/10 e 12/11/2026), com os contratos em `docs/contratos/negociacao/`. |
+| 1.0 | 2026-11-17 | Caio Almeida Oliveira | Criação, a partir das decisões D1 a D30 do autor e das regras do professor (08/10 e 12/11/2026), com os contratos em `docs/negociacao/contratos/`. |
 | 1.1 | 2026-11-18 | Caio Almeida Oliveira | D31: leilão sem oferta confirmada em `dataInicio` termina `DESERTO` na hora (RF-04, RF-06, RN-09, RN-14, CA-18; sai o atributo `loteFixado`). D32: confirma que o autor do melhor lance pode cobri-lo (RN-11). |
 | 1.2 | 2026-11-19 | Caio Almeida Oliveira | Alinhamento com a ESP-MRC-001 v0.5 e a ESP-PED-001 v2.1 (D33 a D42): o Mercado abre o leilão (`leilao_iniciado`) e a negociação direta (`modo_negociacao_definido`) e este serviço deixa de criá-los por HTTP; status `AGUARDANDO_RESERVAS` e liberação dos lances com as reservas resolvidas; rateio pela participação no valor; incremento mínimo; `demandaId` no lance e no fechamento; sem cópia local das ofertas; `tipo` `VENDA_DIRETA` e `compradorId` nulo fora de `ENCERRADO`; `demandaId` com até 64 caracteres. APIs, RFs, RNs e CAs renumerados; INT-NEG-01 a INT-NEG-04 fechadas; INT-NEG-12 nova; INT-NEG-13 nova e fechada com o Pedidos. |

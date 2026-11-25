@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/contratos/negociacao/pedido_atualizado.schema.json",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/negociacao/contratos/pedido_atualizado.schema.json",
   "title": "pedido_atualizado",
   "description": "Consumido pelo negociacao-service (RF-03, RF-04) para saber o resultado da reserva do pedido temporário. Formato da ESP-PED-001 v2.1 §7.4; só CONFIRMADA e RECUSADA em reservaSituacao mudam algo (RN-04). Campos adicionais do produtor são aceitos e ignorados. Chave: pedidoId.",
   "type": "object",

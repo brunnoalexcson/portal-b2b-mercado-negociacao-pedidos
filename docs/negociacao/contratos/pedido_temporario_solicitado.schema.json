@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/contratos/negociacao/lance_realizado.schema.json",
-  "title": "lance_realizado",
-  "description": "Publicado pelo negociacao-service a cada lance aceito (RF-05). Sem máscara de sigilo. Chave: negociacaoId.",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/negociacao/contratos/pedido_temporario_solicitado.schema.json",
+  "title": "pedido_temporario_solicitado",
+  "description": "Publicado pelo negociacao-service para pedir ao pedidos-service um pedido temporário, sem comprador, que reserva o estoque da oferta: um por oferta do leilão e um por negociação direta, na abertura (RF-01, RF-02). Chave: negociacaoId.",
   "type": "object",
   "required": [
     "eventId",
@@ -21,7 +21,7 @@
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
     },
     "eventType": {
-      "const": "lance_realizado"
+      "const": "pedido_temporario_solicitado"
     },
     "eventVersion": {
       "const": "1.0"
@@ -49,11 +49,12 @@
       "type": "object",
       "required": [
         "negociacaoId",
-        "lanceId",
-        "compradorId",
-        "valor",
-        "sequencia",
-        "criadoEm"
+        "tipo",
+        "fornecimentoId",
+        "fornecedorId",
+        "produtoId",
+        "quantidade",
+        "precoUnitario"
       ],
       "additionalProperties": false,
       "properties": {
@@ -61,29 +62,39 @@
           "type": "string",
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
         },
-        "lanceId": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        "tipo": {
+          "enum": [
+            "LEILAO",
+            "VENDA_DIRETA"
+          ]
         },
-        "compradorId": {
+        "fornecimentoId": {
           "type": "string",
           "minLength": 1,
           "maxLength": 64,
           "pattern": "\\S"
         },
-        "valor": {
+        "fornecedorId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "produtoId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "\\S"
+        },
+        "quantidade": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Até 2 casas decimais; a precisão é validada pelo serviço."
+        },
+        "precoUnitario": {
           "type": "number",
           "exclusiveMinimum": 0,
           "description": "Reais (BRL), até 2 casas decimais; a precisão é validada pelo serviço."
-        },
-        "sequencia": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "criadoEm": {
-          "type": "string",
-          "format": "date-time",
-          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
         }
       }
     }

@@ -21,16 +21,14 @@ A demonstração do primeiro fluxo (v1.1) roda com FastAPI, PostgreSQL 16, Redpa
 ```text
 .
 ├── docs/
-│   ├── contratos/
-│   │   └── negociacao/
-│   ├── especificacoes/
-│   │   └── ESP-NEG-001_Negociacao.md
 │   ├── mercado/
 │   │   ├── README.md
 │   │   ├── requisitos.md
 │   │   └── contratos/
 │   ├── negociacao/
 │   │   ├── README.md
+│   │   ├── requisitos.md
+│   │   ├── contratos/
 │   │   └── adr/
 │   └── pedidos/
 │       ├── README.md
@@ -46,7 +44,7 @@ A demonstração do primeiro fluxo (v1.1) roda com FastAPI, PostgreSQL 16, Redpa
         └── compose.pedidos.yml
 ```
 
-As próximas contribuições podem seguir a convenção `services/<serviço>-service/` para código e `docs/<serviço>/` para documentação.
+Cada serviço segue a mesma convenção: código em `services/<serviço>-service/` e documentação em `docs/<serviço>/`, com `README.md`, `requisitos.md` (especificação) e `contratos/` (schema e exemplo de cada tópico).
 
 ## Executar a demonstração
 
@@ -65,6 +63,6 @@ O teste publica uma negociação fechada, verifica a reentrega sem duplicação 
 - [Mercado: visão geral, fronteiras e pendências](docs/mercado/README.md)
 - [Especificação de Mercado (ESP-MRC-001 v0.5, ERS-LLM)](docs/mercado/requisitos.md) e [contratos de eventos](docs/mercado/contratos/)
 - [Negociação e Leilão: visão geral, fronteiras e pendências](docs/negociacao/README.md)
-- [Especificação de Negociação e Leilão (ESP-NEG-001 v1.2, ERS-LLM)](docs/especificacoes/ESP-NEG-001_Negociacao.md) e [contratos de eventos](docs/contratos/negociacao/)
+- [Especificação de Negociação e Leilão (ESP-NEG-001 v1.2, ERS-LLM)](docs/negociacao/requisitos.md) e [contratos de eventos](docs/negociacao/contratos/)
 - [Pedidos: visão geral, fronteiras e pendências](docs/pedidos/README.md)
 - [Especificação de Pedidos (ESP-PED-001 v2.2, ERS-LLM)](docs/pedidos/requisitos.md) e [contratos de eventos](docs/pedidos/contratos/)

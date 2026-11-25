@@ -10,7 +10,7 @@
 | Serviço / Bounded context | `mercado-service` (microsserviço 5 do Portal B2B Distribuído): Mercado / Matching Engine. Porta `8105`, rotas `/api/v1/mercado`, schema PostgreSQL `mercado`, role `svc_mercado` |
 | Autores (PO / Dev / QA) | PO e Dev: Brunno Alexcson (grupo Mercado, Negociação/Leilão e Pedidos). QA: Grupo de Teste e Qualidade (revisão no gate G1) |
 | Data | 2026-11-22 |
-| Documentos relacionados | Diagrama "Arquitetura do Portal B2B Distribuído" (bloco 5); ESP-PED-001 v2.1 (`docs/pedidos/requisitos.md`); ESP-NEG-001 (`docs/especificacoes/ESP-NEG-001_Negociacao.md`, branch `docs/esp-negociacao`); contratos de eventos em `docs/mercado/contratos/`; kit de Infraestrutura (`CONTRACTS.md`, `ORIENTACOES-ARQUITETURA-GRUPOS.md`); contrato de eventos v2.3 do Fornecimento; contratos do grupo de Compra e Demanda (`comum/contratos/`); Identity-Service; modelo ERS-LLM v1.2 do QA |
+| Documentos relacionados | Diagrama "Arquitetura do Portal B2B Distribuído" (bloco 5); ESP-PED-001 v2.1 (`docs/pedidos/requisitos.md`); ESP-NEG-001 (`docs/negociacao/requisitos.md`, branch `docs/esp-negociacao`); contratos de eventos em `docs/mercado/contratos/`; kit de Infraestrutura (`CONTRACTS.md`, `ORIENTACOES-ARQUITETURA-GRUPOS.md`); contrato de eventos v2.3 do Fornecimento; contratos do grupo de Compra e Demanda (`comum/contratos/`); Identity-Service; modelo ERS-LLM v1.2 do QA |
 
 ## 1. Diretivas para a LLM geradora
 

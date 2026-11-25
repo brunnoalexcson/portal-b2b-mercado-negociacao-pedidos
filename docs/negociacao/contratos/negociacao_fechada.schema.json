@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/contratos/negociacao/negociacao_fechada.schema.json",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/negociacao/contratos/negociacao_fechada.schema.json",
   "title": "negociacao_fechada",
   "description": "Publicado pelo negociacao-service uma vez por negociação, em todo final (ENCERRADO, DESERTO, RECUSADO, EXPIRADO). O pedidos-service efetiva os pedidos temporários de alocacoes e cancela os demais; o mercado-service encerra a negociação e abate o saldo da demanda (RF-03, RF-04, RF-06, RF-08, RF-09, RF-10). Chave: negociacaoId.",
   "type": "object",

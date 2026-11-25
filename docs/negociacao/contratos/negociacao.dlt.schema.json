@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/contratos/negociacao/negociacao.dlt.schema.json",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/negociacao/contratos/negociacao.dlt.schema.json",
   "title": "negociacao.dlt",
   "description": "Publicado pelo negociacao-service quando uma mensagem consumida é inválida ou continua falhando depois de 4 execuções (RF-15). Chave: aggregateId original, ou eventId original, ou \"desconhecido\".",
   "type": "object",

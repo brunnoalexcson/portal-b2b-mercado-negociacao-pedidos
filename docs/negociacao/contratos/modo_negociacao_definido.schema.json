@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/contratos/negociacao/modo_negociacao_definido.schema.json",
+  "$id": "https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/blob/main/docs/negociacao/contratos/modo_negociacao_definido.schema.json",
   "title": "modo_negociacao_definido",
   "description": "Consumido pelo negociacao-service (RF-02): o mercado-service publica quando abre uma negociação direta (ESP-MRC-001 RF-08) ou fecha o lote de um leilão. Com modo VENDA_DIRETA, abre a negociação direta com o mesmo negociacaoId; com LEILAO_DIRETO, a mensagem é ignorada, porque o leilão é aberto pelo leilao_iniciado (RN-02). Lista só os campos usados. Chave: negociacaoId.",
   "type": "object",
