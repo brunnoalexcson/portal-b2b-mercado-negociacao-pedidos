@@ -860,7 +860,7 @@ A chave Kafka (`key` de `publish`) é sempre igual ao `aggregateId`.
 |---|---|---|---|---|
 | `modo_negociacao_definido` | Negociação direta aberta (RF-08) ou lote fechado em T1 (RF-10) | `negociacaoId` | `negociacaoId`, `modo`, `produtoId`, `unidade`, `quantidadeTotal`, `valorReferencia`, `demandas[]` {`demandaId`, `demandaOrigemId`, `compradorId`, `quantidade`, `precoMaximo`, `destino`, `prazoDesejado`} (1 na direta, vazia no leilão), `ofertas[]` {`fornecimentoId`, `fornecedorId`, `quantidade`, `precoUnitario`, `valorItem`, `participacao`, `origem`}, `definidaEm` | Negociação (abre a negociação e pede o pedido temporário de cada oferta) |
 | `leilao_iniciado` | Lote fechado em T1 (RF-10), logo depois do `modo_negociacao_definido` do mesmo leilão | `negociacaoId` | `negociacaoId`, `sugestaoId`, `produtoId`, `unidade`, `quantidadeTotal`, `precoInicial`, `incrementoMinimo`, `itens[]` (mesmo formato de `ofertas[]`), `iniciaEm` (T1), `encerraEm` (T2) | Negociação (pede o pedido temporário de cada item e libera os lances com as reservas confirmadas), front-end |
-| `mercado.dlt` | Mensagem consumida inválida ou com falha após 4 execuções (RF-15) | `aggregateId` original se for string de 1 a 128 caracteres; senão `eventId` original convertido com `str` se presente e não vazio; senão `"desconhecido"` | `topicoOrigem`, `originalEvent` (mensagem recebida, intacta), `error` (`"EVENTO_INVALIDO"` ou `"PROCESSAMENTO_FALHOU"`), `detalhe` (1–500 caracteres), `stackTrace` (`""`), `failedAtAttempt` (1 a 4) | operação, QA |
+| `mercado.dlt` | Mensagem consumida inválida ou com falha após 3 execuções (RF-15) | `aggregateId` original se for string de 1 a 128 caracteres; senão `eventId` original convertido com `str` se presente e não vazio; senão `"desconhecido"` | `topicoOrigem`, `originalEvent` (mensagem recebida, intacta), `error` (`"EVENTO_INVALIDO"` ou `"PROCESSAMENTO_FALHOU"`), `detalhe` (1–500 caracteres), `stackTrace` (`""` em `EVENTO_INVALIDO`; pilha de chamadas da última exceção em `PROCESSAMENTO_FALHOU`, como na biblioteca comum do kit), `failedAtAttempt` (1 em `EVENTO_INVALIDO`; 3 em `PROCESSAMENTO_FALHOU`) | operação, QA |
 
 Na negociação direta, `demandas[0].quantidade` e `ofertas[0].quantidade` são a quantidade negociada (não a quantidade total da demanda), `participacao` é 1.0000 e `valorReferencia` = `valorItem`. Na direta, `prazoDesejado` sai normalizado como instante (§4). O destino segue para a Negociação como referência; o destino do pedido é informado pelo comprador no Pedidos (RN-29).
 
@@ -1605,7 +1605,7 @@ Cenário: Chaves públicas indisponíveis
 
 ### RF-15 — Consumir mensagens com idempotência e DLT
 - **Prioridade:** Must
-- **Enunciado (EARS):** Quando uma mensagem for recebida, o serviço deve validá-la, ignorar duplicatas válidas, repetir o processamento em falha até 4 execuções e publicar na DLT a mensagem inválida ou que continuar falhando.
+- **Enunciado (EARS):** Quando uma mensagem for recebida, o serviço deve validá-la, ignorar duplicatas válidas, repetir o processamento em falha até 3 execuções e publicar na DLT a mensagem inválida ou que continuar falhando.
 - **Regras aplicáveis:** RN-31, RN-32
 - **Interface:** todos os tópicos do §7.3; `mercado.dlt`
 
@@ -1627,8 +1627,8 @@ Cenário: Envelope sem payload, duas vezes
 Cenário: Banco indisponível em todas as tentativas
   Dado o repositório lançando RepositorioIndisponivel em toda transação
   Quando o handler recebe demanda_criada de DEM-A
-  Então clock.sleep é chamado com 1, 2 e 4, nesta ordem
-  E publica em mercado.dlt com error "PROCESSAMENTO_FALHOU" e failedAtAttempt 4
+  Então clock.sleep é chamado com 1 e 2, nesta ordem
+  E publica em mercado.dlt com error "PROCESSAMENTO_FALHOU", failedAtAttempt 3 e stackTrace não vazio
 ```
 
 ### RF-16 — Saúde, prontidão e métricas
@@ -1703,7 +1703,7 @@ Cenário: Exceção inesperada do repositório
 | RN-28 | Fornecedor elegível e conflito no leilão: quem tem oferta no lote não dá lance nele, e qualquer comprador pode dar lance, com ou sem demanda; essas regras são aplicadas pela Negociação. Este serviço envia em `leilao_iniciado` os `fornecedorId` dos itens. (DG-24, DG-25, DG-26) | — |
 | RN-29 | Destino: na direta, o destino da demanda segue em `modo_negociacao_definido` como referência para a Negociação. O destino do pedido, na direta e no leilão, é informado pelo comprador no Pedidos depois da venda (ESP-PED-001 D-02). (DG-28) | — |
 | RN-30 | Idempotência HTTP: escopo = (empresa, `sub`, método, caminho canônico, `Idempotency-Key`). Só respostas 2xx são memorizadas, com status, corpo, `Location` e o hash do corpo da requisição, por 24 h, na mesma transação da mudança. Mesmo escopo e mesmo corpo → mesma resposta, sem efeito e sem evento. Mesmo escopo e outro corpo → `409 IDEMPOTENCIA_CONFLITO`. | Repetir CA-33 com o mesmo corpo → 1 evento. |
-| RN-31 | Consumo: a validação (RN-32) vem antes da deduplicação. Mensagem válida com (`source`, `eventId`) já processado → sem efeito, sem publicação. Efeito e `registrar_evento_processado` na mesma transação. Se a transação falhar (`RepositorioIndisponivel` ou outra exceção), o handler repete até 4 execuções no total, chamando `clock.sleep(1)`, `clock.sleep(2)` e `clock.sleep(4)` entre elas; se a quarta falhar, publica em `mercado.dlt` com `error` `"PROCESSAMENTO_FALHOU"` e `failedAtAttempt` 4, fora da transação que falhou. | 4 falhas → DLT com tentativa 4. |
+| RN-31 | Consumo: a validação (RN-32) vem antes da deduplicação. Mensagem válida com (`source`, `eventId`) já processado → sem efeito, sem publicação. Efeito e `registrar_evento_processado` na mesma transação. Se a transação falhar (`RepositorioIndisponivel` ou outra exceção), o handler repete até 3 execuções no total, chamando `clock.sleep(1)` e `clock.sleep(2)` entre elas, como a biblioteca comum do kit (`services/common/consumer.py`); se a terceira falhar, publica em `mercado.dlt` com `error` `"PROCESSAMENTO_FALHOU"`, `failedAtAttempt` 3 e `stackTrace` com a pilha de chamadas da última exceção, fora da transação que falhou. | 3 falhas → DLT com tentativa 3. |
 | RN-32 | Mensagem consumida inválida (§7.3, RN-03) não altera estado e é publicada em `mercado.dlt` na hora, com `error` `"EVENTO_INVALIDO"`, `failedAtAttempt` 1 e chave conforme §7.4. Não é registrada como processada. O handler nunca propaga exceção. | Envelope sem `payload` → DLT com chave DEM-A. |
 | RN-33 | `executar_prazos` processa, cada um numa transação própria e com `bloquear_produto`, os itens de `listar_janelas_vencidas(agora, 100)` (RN-21 a) e de `listar_demandas_vencidas(agora, 100)` (RN-10), verificando de novo a condição antes de agir. Chamar duas vezes no mesmo instante não repete efeitos. Devolve quantos registros mudaram (sugestões fechadas e demandas marcadas com prazo vencido). | Segunda chamada às 13:00 → 0. |
 | RN-34 | Requisição rejeitada (qualquer 4xx ou 5xx) não altera estado, não memoriza idempotência e não publica evento. | Direta com 422 → `emNegociacao` igual. |
