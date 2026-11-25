@@ -12,6 +12,7 @@ O serviço acompanha, por produto, a oferta disponível e a demanda aberta do po
 | Contratos de eventos | Schemas JSON e exemplos validados para os 12 tópicos; conferidos contra os contratos do Pedidos e do Fornecimento |
 | Código (`services/mercado-service/`) | Não iniciado; segue a estrutura do `pedidos-service` |
 | Alinhamento com Pedidos | Fechado em 19/11 (INT-MRC-02): a ESP-PED-001 não muda |
+| Alinhamento com Fornecimento e Produtos | Fechado em 25/11 (INT-MRC-05): o contrato de eventos v2.5 (23/11) registra o Mercado como consumidor dos 5 eventos de produto e oferta; o documento de requisitos (v0.13) e a ESP-PRD-001 (v2.3) foram alinhados no PR #45 e a issue #44 de `davicalvarenga/Sistema-MicServ-SD` foi fechada |
 | Alinhamento com Negociação | Proposta de 19/11 na INT-MRC-01, **a confirmar com o Caio** |
 | Status Report | Decisões marcadas com "Status Report: sim" na seção 13 da ESP |
 
@@ -88,7 +89,6 @@ Segue o diagrama: o Mercado inicia os leilões e publica `modo_negociacao_defini
 | Negociação | Itens da INT-MRC-01 acima |
 | Infra | Criar `demanda_cancelada`, `produto_atualizado` e `fornecimento_atualizado`; registrar o Mercado como produtor e consumidor dos tópicos; retirar o Mercado dos consumidores de `lance_realizado`; rota do gateway |
 | Compra e Demanda | Ajustes pedidos em 17/11 (`precoMaximo`, `frequencia`, `ocorrenciaId` no cancelamento, edição); cancelar demandas de produto excluído |
-| Fornecimento | Atendida em 23/11: o Mercado está registrado como consumidor dos eventos de produto e oferta no contrato v2.5. Falta só o alinhamento da documentação deles, pedido na issue #44 de `davicalvarenga/Sistema-MicServ-SD` |
 | Banco de Dados | DDL do schema `mercado` e quantidade decimal |
 | Autenticação | Padrão de erro com `codigo` |
 | Pedidos | Atualizar a referência para a ESP-MRC-001 v0.5 |
