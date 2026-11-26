@@ -42,9 +42,9 @@ O serviço acompanha, por produto, a oferta disponível e a demanda aberta do po
 
 **Leilão (`LEILAO_DIRETO`)**
 
-1. Quando a demanda supera a oferta, abre uma sugestão de leilão para os fornecedores do produto.
+1. Quando há oferta e a demanda passa da oferta acima do percentual configurado (`EXCESSO_DEMANDA_MINIMO_PERCENTUAL`, padrão 0), abre uma sugestão de leilão para os fornecedores do produto.
 2. Cada fornecedor decide se entra no lote e com quanto; pode alterar ou sair até T1.
-3. O lote fecha (T1) no fim da janela de adesão, quando todos os fornecedores elegíveis entraram ou quando a oferta volta a cobrir a demanda.
+3. O lote fecha (T1) no fim da janela de adesão, quando todos os fornecedores elegíveis entraram ou quando o gatilho do passo 1 deixa de valer (a oferta volta a cobrir a demanda ou chega a zero).
 4. Em T1, o Mercado calcula o preço inicial (soma de quantidade × preço), o incremento mínimo e a participação de cada fornecedor no valor do lote, e publica `modo_negociacao_definido` e `leilao_iniciado`. T2 = T1 + duração configurada.
 5. A Negociação pede o pedido temporário de cada item e só libera os lances com todas as reservas confirmadas. Item com reserva recusada sai do lote antes do primeiro lance, e ela recalcula o preço inicial.
 6. Lances, vencedor e rateio do valor são da Negociação. O Mercado recebe o `negociacao_fechada` para atualizar o saldo das demandas; só o primeiro fechamento de cada negociação é aplicado.

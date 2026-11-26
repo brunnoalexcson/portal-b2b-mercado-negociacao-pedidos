@@ -54,6 +54,7 @@
         "quantidadeTotal",
         "precoInicial",
         "incrementoMinimo",
+        "incrementoMinimoPercentual",
         "itens",
         "iniciaEm",
         "encerraEm"
@@ -94,6 +95,10 @@
         "incrementoMinimo": {
           "type": "number",
           "exclusiveMinimum": 0
+        },
+        "incrementoMinimoPercentual": {
+          "type": "number",
+          "minimum": 0
         },
         "itens": {
           "type": "array",
