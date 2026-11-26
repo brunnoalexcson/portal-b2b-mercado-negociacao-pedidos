@@ -14,13 +14,13 @@ O serviço acompanha, por produto, a oferta disponível e a demanda aberta do po
 | Alinhamento com Pedidos | Fechado em 19/11 (INT-MRC-02): a ESP-PED-001 não muda |
 | Alinhamento com Fornecimento e Produtos | Fechado em 25/11 (INT-MRC-05): o contrato de eventos v2.5 (23/11) registra o Mercado como consumidor dos 5 eventos de produto e oferta; o documento de requisitos (v0.13) e a ESP-PRD-001 (v2.3) foram alinhados no PR #45 e a issue #44 de `davicalvarenga/Sistema-MicServ-SD` foi fechada |
 | Alinhamento com Compra e Demanda | Issues [#1](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/1) e [#2](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/2) abertas em 25/11 (INT-MRC-04), **aguardando resposta do Lucca** |
-| Alinhamento com Negociação | Fechado em 19/11 (INT-MRC-01): a ESP-NEG-001 v1.2 aceitou todos os ajustes (INT-NEG-03, D33 a D42) |
+| Alinhamento com Negociação | Fluxo fechado em 19/11 (INT-MRC-01, ESP-NEG-001 v1.2). Pedidos novos: [issue #11](https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/issues/11) de 25/11 (rateio, incremento, D40 e participação no recálculo, INT-MRC-11) e compra imediata (INT-MRC-10), **aguardando o Caio** |
 | Alinhamento com Autenticação | Fechado em 25/11 (INT-MRC-07): a resposta do Identity na issue #4 (23/11) já está no §7.1 da ESP; o formato de erro do Mercado continua o do §10 |
 | Status Report | Decisões marcadas com "Status Report: sim" na seção 13 da ESP |
 
 ## Documentos
 
-- [Especificação ESP-MRC-001](requisitos.md): regras, rotas, eventos, erros, critérios de aceitação e decisões DG-01 a DG-58, pendências de integração INT-MRC-01 a INT-MRC-10 e pontos fora desta versão (seção 13).
+- [Especificação ESP-MRC-001](requisitos.md): regras, rotas, eventos, erros, critérios de aceitação e decisões DG-01 a DG-58, pendências de integração INT-MRC-01 a INT-MRC-11 e pontos fora desta versão (seção 13).
 - [Contratos de eventos](contratos/): um `<topico>.schema.json` (JSON Schema 2020-12) e um `<topico>.exemplo.json` por tópico consumido e publicado.
 
 ## Como o serviço funciona
@@ -89,7 +89,7 @@ Segue o diagrama: o Mercado inicia os leilões e publica `modo_negociacao_defini
 
 | Grupo | Pendência |
 |---|---|
-| Negociação | Código consumindo `leilao_iniciado` e `modo_negociacao_definido` e teste com o Mercado (prazo: 30/11); na ESP-NEG-001, fechar a INT-NEG-12 (issue #7) e atualizar as referências; compra imediata (INT-MRC-10) |
+| Negociação | Código consumindo `leilao_iniciado` e `modo_negociacao_definido` e teste com o Mercado (prazo: 30/11); na ESP-NEG-001, fechar a INT-NEG-12 (issue #7) e atualizar as referências; [issue #11](https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/issues/11) (INT-MRC-11); compra imediata (INT-MRC-10) |
 | Infra | Criar `demanda_cancelada`, `produto_atualizado` e `fornecimento_atualizado`; registrar o Mercado como produtor e consumidor dos tópicos; retirar o Mercado dos consumidores de `lance_realizado`; retirar do `01-init.sql` as tabelas de exemplo do schema `mercado` (DG-56); rota do gateway |
 | Compra e Demanda | Aguardando resposta das duas issues abertas em 25/11 (INT-MRC-04):<br>[#1](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/1) Mercado × Compra e Demanda: confirmar os 3 eventos de demanda e alinhar preço máximo, UF, cidade e tamanho dos IDs<br>[#2](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/2) Mercado × Compra e Demanda: produto excluído, demanda recorrente, casas decimais e chave das mensagens |
 | Banco de Dados | Validar as tabelas do §6.1 e os tipos decimais (o DR-BD-002 não tem tabelas do Mercado); responder pelo Teams (INT-MRC-06) |
