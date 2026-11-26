@@ -7,9 +7,10 @@ from uuid import UUID
 import pytest
 
 from app.contratos import (
-     MAX_QUANTIDADE, MAX_VALOR, EventoInvalido, chave_dlt, evento_dlt, validar_evento,
+    MAX_QUANTIDADE, MAX_VALOR, EventoInvalido, chave_dlt, corpo_proposta, corpo_vazio, evento_dlt, validar_evento,
 )
-from app.dominio import Ator, acoes_permitidas, alocacao, detalhe_direta, participante, resumo, visivel
+from app.dominio import Ator, aceitando, acoes_permitidas, alocacao, detalhe_direta, participante, resumo, visivel
+from app.jsonio import fingerprint, loads
 from tests.cenarios import COMP_X, COMP_Y, D1, FORN_A, FORN_B, L1, OF_B, P, PT_D, confirmar_reserva, evento_d1, t
 
 D = Decimal
@@ -269,3 +270,62 @@ def test_chave_dlt_e_evento_dlt():
     _, env_sem_corr = evento_dlt("pedido_atualizado", {"correlationId": "inválida!"}, "EVENTO_INVALIDO", "", "", 1, T0)
     assert UUID(env_sem_corr["correlationId"]).version == 4
     assert env_sem_corr["payload"]["detalhe"] == "EVENTO_INVALIDO"
+
+
+def test_aceitando_status_e_limite_de_prazo():
+    neg = _negociacao_direta()
+    assert aceitando(neg, T0) is True
+    assert aceitando(neg, EXPIRA - timedelta(milliseconds=1)) is True
+    assert aceitando(neg, EXPIRA) is False
+    assert aceitando(neg, EXPIRA + timedelta(seconds=1)) is False
+    for status_final in ("ENCERRADO", "RECUSADO", "EXPIRADO"):
+        assert aceitando(_negociacao_direta(status=status_final), T0) is False
+
+
+def test_corpo_proposta_valido_e_casos_invalidos():
+    assert corpo_proposta({"precoUnitario": D("125.00")}) == D("125.00")
+    assert corpo_proposta({"precoUnitario": 125}) == D("125")
+    assert corpo_proposta({"precoUnitario": D("0.01")}) == D("0.01")
+    assert corpo_proposta({"precoUnitario": MAX_VALOR}) == MAX_VALOR
+
+    invalidos = [
+        {"precoUnitario": "125.00"},
+        {"precoUnitario": True},
+        {"precoUnitario": False},
+        {"precoUnitario": 125.0},
+        {"precoUnitario": 0},
+        {"precoUnitario": D("0.00")},
+        {"precoUnitario": -1},
+        {"precoUnitario": D("-0.01")},
+        {"precoUnitario": D("125.001")},
+        {"precoUnitario": D("125.00"), "extra": 1},
+        {"precoUnitario": MAX_VALOR + D("0.01")},
+        {},
+        None,
+        [],
+    ]
+    for caso in invalidos:
+        with pytest.raises(EventoInvalido):
+            corpo_proposta(caso)
+
+
+def test_corpo_vazio_aceita_none_ou_dict_vazio_e_recusa_restante():
+    assert corpo_vazio(None) == {}
+    assert corpo_vazio({}) == {}
+
+    for invalido in ({"precoUnitario": D("125.00")}, {"a": 1}, [], "", 0, False):
+        with pytest.raises(EventoInvalido):
+            corpo_vazio(invalido)
+
+
+def test_fingerprint_normaliza_decimais_e_ordem_de_chaves():
+    h_int = fingerprint(loads('{"precoUnitario": 125}'))
+    h_1 = fingerprint(loads('{"precoUnitario": 125.0}'))
+    h_2 = fingerprint(loads('{"precoUnitario": 125.00}'))
+    assert h_int == h_1 == h_2
+
+    assert fingerprint({"a": 1, "b": [D("2.0"), {"c": 3, "d": D("4.00")}]}) == fingerprint(
+        {"b": [2, {"d": 4, "c": D("3.0")}], "a": D("1.00")},
+    )
+    assert h_2 != fingerprint({"precoUnitario": D("125.01")})
+    assert fingerprint({"v": True}) != fingerprint({"v": 1})

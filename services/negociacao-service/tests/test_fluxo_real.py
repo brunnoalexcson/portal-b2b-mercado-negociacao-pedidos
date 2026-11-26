@@ -244,3 +244,86 @@ def test_compra_imediata_com_cinco_entregas_repetidas():
             (event_id,),
         ).fetchone()[0]
         assert total_processados == 1
+
+
+def test_contraproposta_idempotente_e_aceite_na_direta():
+    negociacao_id = str(uuid4())
+    pedido_id = str(uuid4())
+    jwt_comprador = token(COMPRADOR, "BUYER")
+    jwt_fornecedor = token(FORNECEDOR, "SUPPLIER")
+    publicar(modo_direta(negociacao_id, compra_imediata=False))
+
+    esperar(lambda: get_negociacao(negociacao_id, jwt_comprador).status_code == 200)
+    publicar(confirmacao_reserva(negociacao_id, pedido_id))
+    esperar(
+        lambda: d if (d := loads(get_negociacao(negociacao_id, jwt_comprador).text))["reservaSituacao"] == "CONFIRMADA"
+        else None,
+    )
+
+    chave_idem = f"proposta-{uuid4().hex[:12]}"
+    cabecalhos_proposta = {
+        "Authorization": f"Bearer {jwt_comprador}",
+        "Content-Type": "application/json",
+        "Idempotency-Key": chave_idem,
+    }
+    r_proposta = httpx.post(
+        f"{API}/api/v1/negociacoes/{negociacao_id}/propostas",
+        content=dumps({"precoUnitario": D("125.00")}),
+        headers=cabecalhos_proposta,
+        timeout=5,
+    )
+    assert r_proposta.status_code == 201
+    proposta_criada = loads(r_proposta.text)
+    assert (proposta_criada["autor"], proposta_criada["precoUnitario"], proposta_criada["sequencia"]) == (
+        "BUYER", D("125.00"), 2,
+    )
+
+    r_aceite = httpx.post(
+        f"{API}/api/v1/negociacoes/{negociacao_id}/aceitar",
+        headers={"Authorization": f"Bearer {jwt_fornecedor}"},
+        timeout=5,
+    )
+    assert r_aceite.status_code == 200
+    detalhe_aceite = loads(r_aceite.text)
+    assert (detalhe_aceite["status"], detalhe_aceite["precoAtual"], detalhe_aceite["acoesPermitidas"]) == (
+        "ENCERRADO", D("125.00"), [],
+    )
+
+    fechamentos = ler(
+        "negociacao_fechada", lambda v: v.get("aggregateId") == negociacao_id, esperar_extras=1.5,
+    )
+    assert len(fechamentos) == 1
+    chave, fechada = fechamentos[0]
+    assert chave == negociacao_id
+    assert fechada["payload"] == {
+        "negociacaoId": negociacao_id,
+        "tipo": "VENDA_DIRETA",
+        "status": "ENCERRADO",
+        "compradorId": COMPRADOR,
+        "demandaId": None,
+        "produtoId": PRODUTO,
+        "alocacoes": [{
+            "fornecimentoId": OFERTA,
+            "fornecedorId": FORNECEDOR,
+            "pedidoId": pedido_id,
+            "quantidade": D("10.00"),
+            "valorUnitario": D("125.00"),
+            "valorTotal": D("1250.00"),
+        }],
+    }
+
+    r_replay = httpx.post(
+        f"{API}/api/v1/negociacoes/{negociacao_id}/propostas",
+        content=dumps({"precoUnitario": D("125.00")}),
+        headers=cabecalhos_proposta,
+        timeout=5,
+    )
+    assert r_replay.status_code == 201
+    assert loads(r_replay.text) == proposta_criada
+
+    with psycopg.connect(DSN) as conexao:
+        total_propostas = conexao.execute(
+            "SELECT count(*) FROM negociacao.proposta WHERE negociacao_id = %s",
+            (negociacao_id,),
+        ).fetchone()[0]
+        assert total_propostas == 2

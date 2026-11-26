@@ -206,6 +206,21 @@ class Ambiente:
         self.entregar("pedido_atualizado", mensagem)
         return mensagem
 
+    def inserir_l1(self, status: str = "ABERTO") -> dict:
+        agora = self.relogio.now()
+        leilao = {
+            "negociacaoId": L1, "modo": "LEILAO_DIRETO", "status": status, "produtoId": P,
+            "dataInicio": agora, "dataFim": t("15:00:00"), "quantidadeTotal": D("20.00"),
+            "precoInicial": D("2550.00"), "incrementoMinimo": D("25.50"), "incrementoMinimoPercentual": D("1.00"),
+            "melhorLanceId": None, "totalLances": 0, "compradorId": None, "fornecimentoId": None,
+            "fornecedorId": None, "quantidade": None, "precoOferta": None, "precoAtual": None, "vez": None,
+            "compraImediata": False, "expiraEm": None, "reservaSituacao": None, "pedidoId": None,
+            "totalPropostas": 0, "correlationId": CORR_L1, "criadoEm": agora, "encerradoEm": None,
+        }
+        with self.repo.transacao():
+            self.repo.inserir_negociacao(leilao)
+        return leilao
+
     def get(self, caminho: str, escopo: str | None = "BUYER", empresa: str | None = COMP_X, *,
             jwt_token: str | None = None, sem_auth: bool = False, headers: dict | None = None):
         cabecalhos = {}
@@ -215,6 +230,27 @@ class Ambiente:
         if headers:
             cabecalhos.update(headers)
         resposta = self.cliente.get(caminho, headers=cabecalhos)
+        if resposta.status_code >= 400:
+            validar_erro_rfc7807(resposta)
+            self.respostas_erro.append(resposta)
+        return resposta
+
+    def post(self, caminho: str, corpo_json=AUSENTE, escopo: str | None = "BUYER", empresa: str | None = COMP_X, *,
+             bruto: bytes | str | None = None, jwt_token: str | None = None, sem_auth: bool = False,
+             headers: dict | None = None, chave_idempotencia: str | None = None):
+        cabecalhos = {}
+        if not sem_auth:
+            valor_token = jwt_token if jwt_token is not None else self.token(escopo, empresa)
+            cabecalhos["Authorization"] = f"Bearer {valor_token}"
+        if chave_idempotencia is not None:
+            cabecalhos["Idempotency-Key"] = chave_idempotencia
+        if headers:
+            cabecalhos.update(headers)
+        conteudo = bruto
+        if conteudo is None and corpo_json is not AUSENTE:
+            conteudo = dumps(corpo_json)
+            cabecalhos.setdefault("Content-Type", "application/json")
+        resposta = self.cliente.post(caminho, content=conteudo, headers=cabecalhos)
         if resposta.status_code >= 400:
             validar_erro_rfc7807(resposta)
             self.respostas_erro.append(resposta)

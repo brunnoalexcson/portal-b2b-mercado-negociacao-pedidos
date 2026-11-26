@@ -647,6 +647,12 @@ def test_ca52_formato_de_erro_em_todos_os_codigos_da_parte_2():
         leilao.update(negociacaoId=L1, modo="LEILAO_DIRETO")
         amb.repo.inserir_negociacao(leilao)
 
+    d2 = "31000000-0000-4000-8000-000000000022"
+    msg_d2 = evento_d1(negociacaoId=d2, compraImediata=True)
+    msg_d2["eventId"] = str(uuid4())
+    msg_d2["aggregateId"] = d2
+    amb.entregar("modo_negociacao_definido", msg_d2)
+
     respostas = [
         amb.get("/api/v1/negociacoes", sem_auth=True),
         amb.get("/api/v1/negociacoes", jwt_token=amb.token("BUYER", None, view_mode="NONE", tenant_id=None)),
@@ -654,7 +660,22 @@ def test_ca52_formato_de_erro_em_todos_os_codigos_da_parte_2():
         amb.get(f"/api/v1/negociacoes/{D1}", "BUYER", COMP_Y),
         amb.get(f"/api/v1/negociacoes/{L1}/propostas", "BUYER", COMP_X),
         amb.get("/api/v1/negociacoes/nao-e-uuid", "BUYER", COMP_X),
+        amb.post(f"/api/v1/negociacoes/{D1}/propostas", {"precoUnitario": D("125.00")}, "SUPPLIER", FORN_B),
+        amb.post(f"/api/v1/negociacoes/{D1}/aceitar", escopo="BUYER", empresa=COMP_X),
+        amb.post(f"/api/v1/negociacoes/{D1}/propostas", {"precoUnitario": D("130.01")}, "BUYER", COMP_X),
+        amb.post(f"/api/v1/negociacoes/{d2}/recusar", escopo="BUYER", empresa=COMP_X),
     ]
+    assert amb.post(
+        f"/api/v1/negociacoes/{D1}/propostas", {"precoUnitario": D("125.00")}, "BUYER", COMP_X,
+        chave_idempotencia="K1",
+    ).status_code == 201
+    respostas.append(amb.post(
+        f"/api/v1/negociacoes/{D1}/propostas", {"precoUnitario": D("120.00")}, "BUYER", COMP_X,
+        chave_idempotencia="K1",
+    ))
+    assert amb.post(f"/api/v1/negociacoes/{D1}/recusar", escopo="BUYER", empresa=COMP_X).status_code == 200
+    respostas.append(amb.post(f"/api/v1/negociacoes/{D1}/recusar", escopo="BUYER", empresa=COMP_X))
+
     amb.repo.falhar("obter_negociacao", RuntimeError("falha"), vezes=1)
     respostas.append(amb.get(f"/api/v1/negociacoes/{D1}", "BUYER", COMP_X))
     amb.repo.falhar("obter_negociacao", RepositorioIndisponivel("indisponível"), vezes=1)
