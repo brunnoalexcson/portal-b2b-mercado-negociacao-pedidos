@@ -23,9 +23,10 @@ def jwks():
 
 @app.post("/token")
 def token(empresa: str, escopo: Literal["BUYER", "SUPPLIER", "TENANT_ADMIN", "CARRIER"] = "BUYER",
-          usuario: str = "usr-demo", view_mode: str = "SINGLE"):
+          usuario: str = "usr-demo", view_mode: str = "SINGLE", minutos: int = 5):
     agora = datetime.now(timezone.utc)
+    validade = min(max(minutos, 1), 120)
     claims = {"iss": "identity-service", "aud": "b2b-platform", "sub": usuario,
-              "exp": int((agora + timedelta(minutes=5)).timestamp()), "tenant_id": empresa,
+              "exp": int((agora + timedelta(minutes=validade)).timestamp()), "tenant_id": empresa,
               "active_scope": escopo, "view_mode": view_mode}
     return {"access_token": jwt.encode(claims, chave, algorithm="RS256", headers={"kid": KID})}

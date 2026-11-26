@@ -10,6 +10,10 @@ x-app: &app
   build:
     context: .
     target: runtime
+  # Mesma aplicação de criar_app_real; demo/app_demo.py só declara o Bearer no OpenAPI (botão Authorize do /docs).
+  command: ["uvicorn", "demo.app_demo:criar", "--factory", "--host", "0.0.0.0", "--port", "8105"]
+  volumes:
+    - ./demo:/srv/mercado/demo:ro
   environment:
     DATABASE_URL: postgresql://svc_mercado:mercado_demo_app@db:5432/portal_b2b
     KAFKA_BOOTSTRAP_SERVERS: broker:9092
@@ -109,6 +113,30 @@ services:
       app2:
         condition: service_started
         restart: true
+
+  console:
+    image: docker.redpanda.com/redpandadata/console:v2.7.2
+    environment:
+      KAFKA_BROKERS: broker:9092
+    ports:
+      - "127.0.0.1:${MERCADO_CONSOLE_PORT:-18080}:8080"
+    depends_on:
+      broker:
+        condition: service_healthy
+
+  popular:
+    profiles: ["demo"]
+    build: *build-teste
+    environment:
+      MERCADO_API_URL: http://gateway:8080
+      MERCADO_IDENTITY_URL: http://identity:8000
+      KAFKA_BOOTSTRAP_SERVERS: broker:9092
+      PYTHONPATH: /srv/mercado
+    volumes:
+      - ./demo:/srv/mercado/demo:ro
+    command: ["python", "demo/popular.py"]
+    depends_on:
+      - gateway
 
   teste:
     profiles: ["teste"]
