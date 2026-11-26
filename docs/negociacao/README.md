@@ -8,7 +8,7 @@ O serviço conduz as negociações que o Mercado define: leilões em que comprad
 
 | Item | Situação |
 |---|---|
-| Especificação (ESP-NEG-001 v1.3) | Rascunho alinhado com a ESP-MRC-001 v0.8 e a ESP-PED-001 v2.2; ainda não submetido ao gate G1 do QA |
+| Especificação (ESP-NEG-001 v1.4) | Rascunho alinhado com a ESP-MRC-001 v0.8 e a ESP-PED-001 v2.2; ainda não submetido ao gate G1 do QA |
 | Contratos de eventos | Schemas JSON e exemplos para os 7 tópicos, validados também contra os schemas do Mercado e do Pedidos |
 | Código (`services/negociacao-service/`) | Em andamento; G1 em paralelo |
 | Alinhamento com Mercado e Pedidos | Fechado em 19/11 (INT-NEG-01 a INT-NEG-03); INT-NEG-13 fechada com o Pedidos; IDs com até 64 caracteres no Mercado desde a v0.6 (INT-NEG-12, fechada em 22/11) |
@@ -29,7 +29,7 @@ O serviço conduz as negociações que o Mercado define: leilões em que comprad
 3. Quando nenhuma reserva está pendente, os lances são liberados (`ABERTO`). A oferta recusada sai do lote, e o preço inicial, o incremento e as participações são recalculados. Sem nenhuma reserva confirmada, o leilão termina `DESERTO` na hora.
 4. Até `dataFim`, compradores dão lances. O lance é o **valor total** do lote: o primeiro precisa ser maior ou igual ao preço inicial, e cada lance seguinte, pelo menos o melhor lance mais o incremento mínimo. O comprador pode informar a sua demanda (`demandaId`).
 5. Em `dataFim`, o leilão fecha sozinho:
-   - com lance, fica `ENCERRADO`, e o valor é rateado pela participação de cada oferta no valor do lote (o centavo que sobra vai para a oferta de maior valor);
+   - com lance, fica `ENCERRADO`, e o valor é rateado na proporção exata do valor de cada oferta no lote (os centavos que sobram vão para a oferta de maior valor);
    - sem lance, ou com reserva ainda pendente, fica `DESERTO`.
 
 **Negociação direta (`VENDA_DIRETA`)**
