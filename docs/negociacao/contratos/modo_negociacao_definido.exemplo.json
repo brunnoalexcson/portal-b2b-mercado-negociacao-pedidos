@@ -9,6 +9,7 @@
   "payload": {
     "negociacaoId": "31000000-0000-4000-8000-000000000002",
     "modo": "VENDA_DIRETA",
+    "compraImediata": false,
     "produtoId": "35000000-0000-4000-8000-000000000001",
     "unidade": "TON",
     "quantidadeTotal": 10.00,

@@ -52,6 +52,7 @@
         "quantidadeTotal",
         "precoInicial",
         "incrementoMinimo",
+        "incrementoMinimoPercentual",
         "itens",
         "iniciaEm",
         "encerraEm"
@@ -82,6 +83,11 @@
           "type": "number",
           "exclusiveMinimum": 0,
           "description": "Reais (BRL), até 2 casas decimais; a precisão é validada pelo serviço."
+        },
+        "incrementoMinimoPercentual": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Percentual do Mercado (LEILAO_INCREMENTO_MINIMO_PERCENTUAL), usado no recálculo do incremento quando uma oferta sai do lote (RN-05)."
         },
         "itens": {
           "type": "array",

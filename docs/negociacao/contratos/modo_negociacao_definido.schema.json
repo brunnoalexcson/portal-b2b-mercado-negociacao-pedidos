@@ -122,6 +122,10 @@
               }
             }
           }
+        },
+        "compraImediata": {
+          "type": "boolean",
+          "description": "Só em VENDA_DIRETA. true = compra pelo preço anunciado: a negociação fecha sozinha quando a reserva confirma (RN-24). Ausente = false."
         }
       },
       "allOf": [
