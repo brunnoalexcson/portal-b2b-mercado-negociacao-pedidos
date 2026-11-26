@@ -113,6 +113,26 @@ class Postgres:
         """, {"agora": agora, "limite": limite}).fetchall()
         return [str(linha["id"]) for linha in linhas]
 
+    # ofertas do leilão
+
+    def inserir_oferta_leilao(self, oferta):
+        self._inserir("oferta_leilao", OFERTA_LEILAO, oferta)
+
+    def listar_ofertas_leilao(self, negociacao_id):
+        linhas = self.conexao().execute(
+            "SELECT * FROM negociacao.oferta_leilao WHERE negociacao_id = %s ORDER BY ordem", (negociacao_id,),
+        ).fetchall()
+        return [_campos(OFERTA_LEILAO, linha) for linha in linhas]
+
+    def atualizar_oferta_leilao(self, oferta):
+        chave = ("negociacaoId", "fornecimentoId")
+        campos = [campo for campo in OFERTA_LEILAO if campo not in chave]
+        self.conexao().execute(
+            f"UPDATE negociacao.oferta_leilao SET {', '.join(f'{OFERTA_LEILAO[c]} = %s' for c in campos)} "
+            "WHERE negociacao_id = %s AND fornecimento_id = %s",
+            [oferta[campo] for campo in campos] + [oferta[campo] for campo in chave],
+        )
+
     # propostas
 
     def inserir_proposta(self, proposta):
@@ -168,6 +188,10 @@ NEGOCIACAO = _colunas("""
 PROPOSTA = _colunas("propostaId negociacaoId autor empresaId precoUnitario sequencia criadoEm",
                     {"propostaId": "id"})
 IDEMPOTENCIA = _colunas("hashCorpo status corpo location criadoEm", {})
+
+OFERTA_LEILAO = _colunas("""
+    negociacaoId fornecimentoId fornecedorId quantidade precoUnitario valorItem participacao ordem situacao pedidoId
+""", {})
 
 
 def _campos(colunas, linha):

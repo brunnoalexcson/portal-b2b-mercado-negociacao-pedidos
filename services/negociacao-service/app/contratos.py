@@ -11,9 +11,11 @@ FONTE = "negociacao-service"
 VERSAO = "1.0"
 TOPICO_DLT = "negociacao.dlt"
 Q2 = Decimal("0.01")
+Q4 = Decimal("0.0001")
 CAMPOS_ENVELOPE = ("eventId", "eventType", "eventVersion", "timestamp", "source", "correlationId",
                    "aggregateId", "payload")
-PRODUTORES = {"modo_negociacao_definido": "mercado-service", "pedido_atualizado": "pedidos-service"}
+PRODUTORES = {"leilao_iniciado": "mercado-service", "modo_negociacao_definido": "mercado-service",
+              "pedido_atualizado": "pedidos-service"}
 TIPO = {"LEILAO_DIRETO": "LEILAO", "VENDA_DIRETA": "VENDA_DIRETA"}
 CORRELACAO = re.compile(r"[A-Za-z0-9._-]{1,128}")
 UUID_TEXTO = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
@@ -94,6 +96,7 @@ def _instante(valor, campo):
         _invalido(campo)
     if lido.utcoffset() is None:
         _invalido(campo)
+    return lido.astimezone(timezone.utc)
 
 
 def corpo_proposta(corpo):
@@ -144,7 +147,73 @@ def _pedido_atualizado(p):
             "fornecimentoId": _texto(p, "fornecimentoId", "payload"), "reservaSituacao": situacao}
 
 
-PAYLOADS = {"modo_negociacao_definido": _modo_negociacao_definido, "pedido_atualizado": _pedido_atualizado}
+# ---------------------------------------------------------------- leilão
+
+def _participacao(dados, nome, caminho):
+    """Participação (§4): número > 0 e ≤ 1, com até 4 casas."""
+    valor = _campo(dados, nome, caminho)
+    if isinstance(valor, bool) or not isinstance(valor, (int, Decimal)):
+        _invalido(f"{caminho}.{nome}")
+    valor = Decimal(valor)
+    if not valor.is_finite() or valor <= 0 or valor > 1 or valor != valor.quantize(Q4):
+        _invalido(f"{caminho}.{nome}")
+    return valor
+
+
+def _percentual(dados, nome, caminho):
+    """Número ≥ 0 sem limite de casas: o Mercado manda o percentual configurado como está."""
+    valor = _campo(dados, nome, caminho)
+    if isinstance(valor, bool) or not isinstance(valor, (int, Decimal)):
+        _invalido(f"{caminho}.{nome}")
+    valor = Decimal(valor)
+    if not valor.is_finite() or valor < 0:
+        _invalido(f"{caminho}.{nome}")
+    return valor
+
+
+def _item_leilao(item, caminho):
+    return {
+        "fornecimentoId": _texto(item, "fornecimentoId", caminho),
+        "fornecedorId": _texto(item, "fornecedorId", caminho),
+        "quantidade": _numero(item, "quantidade", caminho, MAX_QUANTIDADE),
+        "precoUnitario": _numero(item, "precoUnitario", caminho, MAX_VALOR),
+        "valorItem": _numero(item, "valorItem", caminho, MAX_VALOR),
+        "participacao": _participacao(item, "participacao", caminho),
+    }
+
+
+def _leilao_iniciado(p):
+    itens = _campo(p, "itens", "payload")
+    if not isinstance(itens, list) or not itens:
+        _invalido("payload.itens")
+    itens = [_item_leilao(item, f"payload.itens[{i}]") for i, item in enumerate(itens)]
+    if len({item["fornecimentoId"] for item in itens}) != len(itens):
+        raise EventoInvalido("fornecimentoId repetido em payload.itens.")
+    inicia = _instante(_campo(p, "iniciaEm", "payload"), "payload.iniciaEm")
+    encerra = _instante(_campo(p, "encerraEm", "payload"), "payload.encerraEm")
+    if encerra <= inicia:
+        _invalido("payload.encerraEm")
+    return {
+        "negociacaoId": _uuid(p, "negociacaoId", "payload"), "produtoId": _texto(p, "produtoId", "payload"),
+        "quantidadeTotal": _numero(p, "quantidadeTotal", "payload", MAX_QUANTIDADE),
+        "precoInicial": _numero(p, "precoInicial", "payload", MAX_VALOR),
+        "incrementoMinimo": _numero(p, "incrementoMinimo", "payload", MAX_VALOR),
+        "incrementoMinimoPercentual": _percentual(p, "incrementoMinimoPercentual", "payload"),
+        "itens": itens, "iniciaEm": inicia, "encerraEm": encerra,
+    }
+
+
+def pedido_temporario_leilao(negociacao, oferta):
+    return {
+        "negociacaoId": negociacao["negociacaoId"], "tipo": TIPO[negociacao["modo"]],
+        "fornecimentoId": oferta["fornecimentoId"], "fornecedorId": oferta["fornecedorId"],
+        "produtoId": negociacao["produtoId"], "quantidade": q2(oferta["quantidade"]),
+        "precoUnitario": q2(oferta["precoUnitario"]),
+    }
+
+
+PAYLOADS = {"leilao_iniciado": _leilao_iniciado, "modo_negociacao_definido": _modo_negociacao_definido,
+            "pedido_atualizado": _pedido_atualizado}
 
 
 def validar_evento(topico, mensagem):

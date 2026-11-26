@@ -3,10 +3,11 @@ import logging
 import traceback
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from decimal import ROUND_DOWN, ROUND_HALF_UP
 from uuid import uuid4
 
 from app import contratos
-from app.contratos import EventoInvalido, q2
+from app.contratos import Q2, Q4, EventoInvalido, q2
 from app.portas import Clock, EventBus, NegociacaoRepositorio, RepositorioIndisponivel
 
 log = logging.getLogger(__name__)
@@ -98,6 +99,77 @@ def detalhe_direta(negociacao: dict, ator: Ator, agora: datetime) -> dict:
 def proposta(p: dict) -> dict:
     return {"propostaId": p["propostaId"], "negociacaoId": p["negociacaoId"], "autor": p["autor"],
             "precoUnitario": q2(p["precoUnitario"]), "sequencia": p["sequencia"], "criadoEm": p["criadoEm"]}
+
+
+# ---------------------------------------------------------------- leilão: regras puras
+
+def incremento_minimo(preco_inicial, percentual):
+    """RN-05: `max(0.01, P' × percentual / 100)`, 2 casas, ROUND_HALF_UP (RN-22 da ESP-MRC-001)."""
+    return max(Q2, q2(preco_inicial * percentual / 100))
+
+
+def participacoes(valores: list) -> list:
+    """RN-05: maior resto, piso de 0.0001 e soma 1.0000 (RN-23 da ESP-MRC-001). Empate: menor `ordem`."""
+    total = sum(valores)
+    exatos = [valor / total for valor in valores]
+    truncados = [exato.quantize(Q4, rounding=ROUND_DOWN) for exato in exatos]
+    partes = [max(Q4, truncado) for truncado in truncados]
+    restos = [exato - truncado for exato, truncado in zip(exatos, truncados)]
+    diferenca = 1 - sum(partes)
+    if diferenca > 0:
+        for i in sorted(range(len(partes)), key=lambda i: (-restos[i], i))[:int(diferenca / Q4)]:
+            partes[i] += Q4
+    elif diferenca < 0:
+        falta = -diferenca
+        for i in sorted(range(len(partes)), key=lambda i: (-partes[i], i)):
+            retirada = min(falta, partes[i] - Q4)
+            partes[i] -= retirada
+            falta -= retirada
+    return partes
+
+
+def recalcular_lote(negociacao: dict, lote: list[dict]) -> None:
+    """RN-05: quantidade, preço inicial, incremento e participações só com as ofertas confirmadas."""
+    preco = q2(sum(o["valorItem"] for o in lote))
+    for oferta, parte in zip(lote, participacoes([o["valorItem"] for o in lote])):
+        oferta["participacao"] = parte
+    negociacao.update(quantidadeTotal=q2(sum(o["quantidade"] for o in lote)), precoInicial=preco,
+                      incrementoMinimo=incremento_minimo(preco, negociacao["incrementoMinimoPercentual"]))
+
+
+def fornecedor_do_leilao(ofertas: list[dict], ator: Ator) -> bool:
+    return any(o["fornecedorId"] == ator.empresa for o in ofertas)
+
+
+def sigilo(comprador_id, ofertas: list[dict], ator: Ator):
+    """RN-09: o comprador só aparece para ele mesmo e para os fornecedores do leilão."""
+    if comprador_id is None or comprador_id == ator.empresa or fornecedor_do_leilao(ofertas, ator):
+        return comprador_id
+    return "OCULTO"
+
+
+def acoes_leilao(negociacao: dict, ofertas: list[dict], ator: Ator, agora: datetime) -> list[str]:
+    """RN-17 no leilão."""
+    aceitando = negociacao["status"] == "ABERTO" and agora < negociacao["dataFim"]
+    return ["DAR_LANCE"] if aceitando and ator.escopo == "BUYER" and not fornecedor_do_leilao(ofertas, ator) else []
+
+
+def oferta_leilao(o: dict) -> dict:
+    return {"negociacaoId": o["negociacaoId"], "fornecimentoId": o["fornecimentoId"], "fornecedorId": o["fornecedorId"],
+            "quantidade": q2(o["quantidade"]), "precoUnitario": q2(o["precoUnitario"]), "valorItem": q2(o["valorItem"]),
+            "participacao": o["participacao"].quantize(Q4, rounding=ROUND_HALF_UP), "situacao": o["situacao"]}
+
+
+def detalhe_leilao(negociacao: dict, ofertas: list[dict], ator: Ator, agora: datetime) -> dict:
+    n = negociacao
+    return {"negociacaoId": n["negociacaoId"], "modo": n["modo"], "status": n["status"], "produtoId": n["produtoId"],
+            "dataInicio": n["dataInicio"], "dataFim": n["dataFim"], "quantidadeTotal": q2(n["quantidadeTotal"]),
+            "precoInicial": q2(n["precoInicial"]), "incrementoMinimo": q2(n["incrementoMinimo"]),
+            # shortcut: sem lances ainda, melhorLance é sempre null; passa a vir de melhorLanceId com a API-07
+            "melhorLance": None, "totalLances": n["totalLances"],
+            "compradorId": sigilo(n["compradorId"], ofertas, ator), "ofertas": [oferta_leilao(o) for o in ofertas],
+            "criadoEm": n["criadoEm"], "encerradoEm": n["encerradoEm"], "agora": agora,
+            "acoesPermitidas": acoes_leilao(n, ofertas, ator, agora)}
 
 
 # ---------------------------------------------------------------- serviço
@@ -207,12 +279,14 @@ class Negociacoes:
         return "aplicado"
 
     def _pedido_atualizado(self, op: _Operacao, p: dict) -> str:
-        """RN-04, RN-14 e RN-24 na negociação direta."""
+        """RN-04, RN-14 e RN-24 na negociação direta; no leilão, `_reserva_leilao`."""
         # negociacaoId do Pedidos é texto livre: o que não é UUID não é negociação deste serviço
         if p["reservaSituacao"] not in ("CONFIRMADA", "RECUSADA") or not contratos.UUID_TEXTO.fullmatch(
                 p["negociacaoId"]):
             return "ignorado"
         negociacao = self.repo.obter_negociacao(p["negociacaoId"], bloquear=True)
+        if negociacao is not None and negociacao["modo"] == "LEILAO_DIRETO":
+            return self._reserva_leilao(op, negociacao, p)
         if (negociacao is None or negociacao["status"] in FINAIS or negociacao["reservaSituacao"] != "PENDENTE"
                 or negociacao["fornecimentoId"] != p["fornecimentoId"]):
             return "ignorado"
@@ -244,7 +318,8 @@ class Negociacoes:
     def detalhe(self, ator: Ator, negociacao_id: str) -> dict:
         with self.repo.transacao():
             negociacao = self._visivel(ator, negociacao_id)
-        # shortcut: só a projeção da direta; o detalhe do leilão entra com a abertura do leilão
+            if negociacao["modo"] == "LEILAO_DIRETO":
+                return detalhe_leilao(negociacao, self.repo.listar_ofertas_leilao(negociacao_id), ator, self.agora())
         return detalhe_direta(negociacao, ator, self.agora())
 
     def propostas(self, ator: Ator, negociacao_id: str, pagina: int, tamanho: int) -> dict:
@@ -338,8 +413,8 @@ class Negociacoes:
         for negociacao_id in vencidas:
             with self.repo.transacao():
                 negociacao = self.repo.obter_negociacao(negociacao_id, bloquear=True)
-                # shortcut: só a direta expira; o encerramento do leilão em dataFim (RN-10) entra com a abertura
-                # do leilão, e até lá um leilão vencido é deixado como está
+                # shortcut: só a direta expira; até o encerramento do leilão em dataFim (RN-10) existir, um leilão
+                # vencido é deixado como está e continua voltando em listar_vencidas
                 if (negociacao is None or negociacao["modo"] != "VENDA_DIRETA" or negociacao["status"] != "ABERTO"
                         or agora < negociacao["expiraEm"]):
                     continue
@@ -348,3 +423,54 @@ class Negociacoes:
                 self._enviar(op)
                 mudancas += 1
         return mudancas
+
+    # ------------------------------------------------------------ leilão (RN-01, RN-03, RN-04, RN-05)
+
+    def _leilao_iniciado(self, op: _Operacao, p: dict) -> str:
+        """RN-01 e RN-03."""
+        if self.repo.obter_negociacao(p["negociacaoId"]) is not None:
+            return "ignorado"
+        negociacao = {
+            "negociacaoId": p["negociacaoId"], "modo": "LEILAO_DIRETO", "status": "AGUARDANDO_RESERVAS",
+            "produtoId": p["produtoId"], "dataInicio": p["iniciaEm"], "dataFim": p["encerraEm"],
+            "quantidadeTotal": p["quantidadeTotal"], "precoInicial": p["precoInicial"],
+            "incrementoMinimo": p["incrementoMinimo"], "incrementoMinimoPercentual": p["incrementoMinimoPercentual"],
+            "melhorLanceId": None, "totalLances": 0, "compradorId": None, "fornecimentoId": None,
+            "fornecedorId": None, "quantidade": None, "precoOferta": None, "precoAtual": None, "vez": None,
+            "compraImediata": False, "expiraEm": None, "reservaSituacao": None, "pedidoId": None,
+            "totalPropostas": 0, "correlationId": op.correlacao, "criadoEm": op.agora, "encerradoEm": None,
+        }
+        self.repo.inserir_negociacao(negociacao)
+        for ordem, item in enumerate(p["itens"], start=1):
+            oferta = {**item, "negociacaoId": p["negociacaoId"], "ordem": ordem, "situacao": "PENDENTE",
+                      "pedidoId": None}
+            self.repo.inserir_oferta_leilao(oferta)
+            self._publicar(op, "pedido_temporario_solicitado", negociacao,
+                           contratos.pedido_temporario_leilao(negociacao, oferta))
+        return "aplicado"
+
+    def _reserva_leilao(self, op: _Operacao, negociacao: dict, p: dict) -> str:
+        """RN-04 e RN-05: muda a oferta pendente e, sem nenhuma pendente, libera os lances ou fecha deserto."""
+        if negociacao["status"] != "AGUARDANDO_RESERVAS":
+            return "ignorado"
+        ofertas = self.repo.listar_ofertas_leilao(negociacao["negociacaoId"])
+        oferta = next((o for o in ofertas if o["fornecimentoId"] == p["fornecimentoId"]), None)
+        if oferta is None or oferta["situacao"] != "PENDENTE":
+            return "ignorado"
+        oferta["situacao"] = p["reservaSituacao"]
+        if p["reservaSituacao"] == "CONFIRMADA":
+            oferta["pedidoId"] = p["pedidoId"]
+        self.repo.atualizar_oferta_leilao(oferta)
+        if any(o["situacao"] == "PENDENTE" for o in ofertas):
+            return "aplicado"
+        lote = [o for o in ofertas if o["situacao"] == "CONFIRMADA"]
+        if not lote:
+            self._fechar(op, negociacao, "DESERTO", [])
+            return "aplicado"
+        if len(lote) < len(ofertas):
+            recalcular_lote(negociacao, lote)
+            for confirmada in lote:
+                self.repo.atualizar_oferta_leilao(confirmada)
+        negociacao["status"] = "ABERTO"
+        self.repo.atualizar_negociacao(negociacao)
+        return "aplicado"
