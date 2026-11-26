@@ -3,7 +3,8 @@
     python demo/popular.py                       abre duas diretas (uma com compra imediata) e imprime IDs e tokens
     python demo/popular.py confirmar <negociacaoId>   responde a reserva da negociação como o Pedidos
     python demo/popular.py recusar <negociacaoId>     responde a reserva recusada
-    python demo/popular.py leilao                     abre um leilão com 2 ofertas e imprime IDs e tokens
+    python demo/popular.py leilao [minutos]           abre um leilão com 2 ofertas (dataFim em 120 min, ou nos
+                                                      minutos dados) e imprime IDs e tokens
     python demo/popular.py confirmar|recusar <negociacaoId> <fornecimentoId>   responde a reserva de uma oferta
 
 Roda na imagem de teste pelo Compose: serviço `popular` do compose.demo.yml."""
@@ -121,7 +122,7 @@ def responder(situacao, negociacao_id, fornecimento_id=None):
 FORNECEDOR_A, FORNECEDOR_B = f"fornecedor-a-{SUFIXO}", f"fornecedor-b-{SUFIXO}"
 
 
-def leilao(negociacao_id):
+def leilao(negociacao_id, minutos):
     """leilao_iniciado como o Mercado publica (formato de docs/negociacao/contratos/leilao_iniciado.exemplo.json)."""
     agora = datetime.now(timezone.utc)
     itens = [(f"oferta-a-{SUFIXO}", FORNECEDOR_A, "5.00", "120.00", "600.00", "0.2353", "Rio Verde"),
@@ -134,16 +135,19 @@ def leilao(negociacao_id):
                    "precoUnitario": Decimal(preco), "valorItem": Decimal(valor), "participacao": Decimal(parte),
                    "origem": {"cidade": cidade, "uf": "GO"}}
                   for oferta, fornecedor, quantidade, preco, valor, parte, cidade in itens],
-        "iniciaEm": formato_json(agora), "encerraEm": formato_json(agora + timedelta(hours=2)),
+        "iniciaEm": formato_json(agora), "encerraEm": formato_json(agora + timedelta(minutes=minutos)),
     })
 
 
-def abrir_leilao():
+def abrir_leilao(minutos=120):
     negociacao_id = str(uuid4())
-    asyncio.run(publicar(leilao(negociacao_id)))
+    asyncio.run(publicar(leilao(negociacao_id, minutos)))
     with httpx.Client(timeout=5) as cliente:
         tokens = {"Comprador A (BUYER)": token(cliente, COMPRADOR, "BUYER"),
+                  "Comprador B (BUYER)": token(cliente, OUTRO, "BUYER"),
                   "Fornecedor A (SUPPLIER, do leilão)": token(cliente, FORNECEDOR_A, "SUPPLIER"),
+                  # a mesma empresa com escopo de compra, para mostrar o conflito de interesse (RN-08)
+                  "Fornecedor A (BUYER, do leilão)": token(cliente, FORNECEDOR_A, "BUYER"),
                   "Fornecedor X (SUPPLIER, fora do leilão)": token(cliente, FORNECEDOR, "SUPPLIER")}
         cabecalho = {"Authorization": f"Bearer {tokens['Comprador A (BUYER)']}"}
         limite = time.monotonic() + 30
@@ -154,7 +158,7 @@ def abrir_leilao():
         # loads com Decimal, para imprimir 2550.00 como a API devolve
         corpo = loads(resposta.text)
     print(f"Leilão: {negociacao_id}\n  status {corpo.get('status')}, precoInicial {corpo.get('precoInicial')},"
-          f" acoesPermitidas {corpo.get('acoesPermitidas')}")
+          f" dataFim {corpo.get('dataFim')}, acoesPermitidas {corpo.get('acoesPermitidas')}")
     for oferta in corpo.get("ofertas", []):
         print(f"  oferta {oferta['fornecimentoId']} de {oferta['fornecedorId']}: {oferta['valorItem']},"
               f" participação {oferta['participacao']}, {oferta['situacao']}")
@@ -175,6 +179,8 @@ if __name__ == "__main__":
             responder("RECUSADA", negociacao_id)
         case ["leilao"]:
             abrir_leilao()
+        case ["leilao", minutos] if minutos.isdigit() and int(minutos) > 0:
+            abrir_leilao(int(minutos))
         case ["confirmar", negociacao_id, fornecimento_id]:
             responder("CONFIRMADA", negociacao_id, fornecimento_id)
         case ["recusar", negociacao_id, fornecimento_id]:

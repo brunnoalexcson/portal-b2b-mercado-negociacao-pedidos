@@ -234,7 +234,8 @@ def test_ca32_erros_na_recusa():
     amb.abrir_d1()
     amb.inserir_l1()
     amb.em("2026-11-22T12:00:00.000Z")
-    assert executar_prazos(amb.app) == 1
+    # D1 expira e L1, sem lances e com dataFim vencido, fica DESERTO
+    assert executar_prazos(amb.app) == 2
 
     assert codigo_erro(amb.post(f"/api/v1/negociacoes/{D1}/recusar", escopo="SUPPLIER", empresa=FORN_B)) == (
         409, "NEGOCIACAO_ENCERRADA",

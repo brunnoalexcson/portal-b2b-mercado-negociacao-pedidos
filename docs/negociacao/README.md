@@ -8,7 +8,7 @@ O serviço conduz as negociações que o Mercado define: leilões em que comprad
 
 | Item | Situação |
 |---|---|
-| Especificação (ESP-NEG-001 v1.4) | Rascunho alinhado com a ESP-MRC-001 v0.8 e a ESP-PED-001 v2.2; ainda não submetido ao gate G1 do QA |
+| Especificação (ESP-NEG-001 v1.5) | Rascunho alinhado com a ESP-MRC-001 v0.8 e a ESP-PED-001 v2.2; ainda não submetido ao gate G1 do QA |
 | Contratos de eventos | Schemas JSON e exemplos para os 7 tópicos, validados também contra os schemas do Mercado e do Pedidos |
 | Código (`services/negociacao-service/`) | Em andamento; G1 em paralelo |
 | Alinhamento com Mercado e Pedidos | Fechado em 19/11 (INT-NEG-01 a INT-NEG-03); INT-NEG-13 fechada com o Pedidos; IDs com até 64 caracteres no Mercado desde a v0.6 (INT-NEG-12, fechada em 22/11) |

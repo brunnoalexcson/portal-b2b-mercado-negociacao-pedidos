@@ -7,17 +7,18 @@ from uuid import UUID
 import pytest
 
 from app.contratos import (
-    MAX_QUANTIDADE, MAX_VALOR, EventoInvalido, chave_dlt, corpo_proposta, corpo_vazio, evento_dlt,
-    pedido_temporario_leilao, validar_evento,
+    MAX_QUANTIDADE, MAX_VALOR, EventoInvalido, chave_dlt, corpo_lance, corpo_proposta, corpo_vazio, evento_dlt,
+    negociacao_fechada, pedido_temporario_leilao, validar_evento,
 )
 from app.dominio import (
     Ator, aceitando, acoes_leilao, acoes_permitidas, alocacao, detalhe_direta, detalhe_leilao, fornecedor_do_leilao,
-    incremento_minimo, oferta_leilao, participante, participacoes, recalcular_lote, resumo, sigilo, visivel,
+    incremento_minimo, lance, lance_com_sigilo, leilao_aberto, oferta_leilao, participante, participacoes, ratear,
+    recalcular_lote, resumo, sigilo, visivel,
 )
 from app.jsonio import fingerprint, loads
 from tests.cenarios import (
-    COMP_X, COMP_Y, CORR_L1, D1, FORN_A, FORN_B, FORN_C, L1, OF_A, OF_B, OF_D, P, PT_A, PT_B, PT_D, confirmar_reserva,
-    evento_d1, evento_l1, t,
+    COMP_X, COMP_Y, CORR_L1, D1, DEM_Y, FORN_A, FORN_B, FORN_C, L1, OF_A, OF_B, OF_D, P, PT_A, PT_B, PT_D,
+    confirmar_reserva, evento_d1, evento_l1, t,
 )
 
 D = Decimal
@@ -512,6 +513,89 @@ def test_acoes_leilao_escopo_status_conflito_e_prazo():
         assert acoes_leilao(_negociacao_leilao(status=status), ofertas, Ator("u1", COMP_X, "BUYER"), T0) == []
 
 
+def test_leilao_aberto_status_e_limites_de_data_fim():
+    leilao = _negociacao_leilao(status="ABERTO")
+    fim = leilao["dataFim"]
+
+    assert leilao_aberto(leilao, T0) is True
+    assert leilao_aberto(leilao, fim - timedelta(milliseconds=1)) is True
+    assert leilao_aberto(leilao, fim) is False
+    assert leilao_aberto(leilao, fim + timedelta(milliseconds=1)) is False
+    for status in ("AGUARDANDO_RESERVAS", "ENCERRADO", "DESERTO"):
+        assert leilao_aberto(_negociacao_leilao(status=status), T0) is False
+
+
+def test_lance_e_lance_com_sigilo_formatam_valor_omitem_campos_internos_e_mascaram_concorrente():
+    ofertas = _ofertas_l1()
+    ofertas[1]["situacao"] = "RECUSADA"
+    registro = {
+        "lanceId": "33000000-0000-4000-8000-000000000002",
+        "negociacaoId": L1,
+        "compradorId": COMP_Y,
+        "usuarioId": "c3000000-0000-4000-8000-000000000002",
+        "valor": D("2600"),
+        "demandaId": "36000000-0000-4000-8000-000000000002",
+        "sequencia": 2,
+        "criadoEm": T0,
+    }
+
+    sem_mascara = lance(registro)
+    assert sem_mascara == {
+        "lanceId": "33000000-0000-4000-8000-000000000002",
+        "negociacaoId": L1,
+        "compradorId": COMP_Y,
+        "valor": D("2600.00"),
+        "sequencia": 2,
+        "criadoEm": T0,
+    }
+    assert "usuarioId" not in sem_mascara
+    assert "demandaId" not in sem_mascara
+
+    assert lance_com_sigilo(registro, ofertas, Ator("u1", COMP_Y, "BUYER"))["compradorId"] == COMP_Y
+    assert lance_com_sigilo(registro, ofertas, Ator("u2", FORN_A, "SUPPLIER"))["compradorId"] == COMP_Y
+    assert lance_com_sigilo(registro, ofertas, Ator("u3", FORN_B, "BUYER"))["compradorId"] == COMP_Y
+    assert lance_com_sigilo(registro, ofertas, Ator("u4", COMP_X, "BUYER")) == {
+        **sem_mascara,
+        "compradorId": "OCULTO",
+    }
+    assert lance_com_sigilo(registro, ofertas, Ator("u5", FORN_C, "SUPPLIER"))["compradorId"] == "OCULTO"
+
+
+def test_corpo_lance_valido_e_casos_invalidos():
+    assert corpo_lance({"valor": D("2550.00")}) == (D("2550.00"), None)
+    assert corpo_lance({"valor": 2550, "demandaId": None}) == (D("2550"), None)
+    assert corpo_lance({"valor": D("0.01"), "demandaId": "dem_1.a-B"}) == (D("0.01"), "dem_1.a-B")
+    assert corpo_lance({"valor": MAX_VALOR, "demandaId": "d" * 64}) == (MAX_VALOR, "d" * 64)
+
+    invalidos = [
+        {"valor": D("2550.00"), "demandaId": ""},
+        {"valor": D("2550.00"), "demandaId": "d" * 65},
+        {"valor": D("2550.00"), "demandaId": "dem 1"},
+        {"valor": D("2550.00"), "demandaId": " "},
+        {"valor": D("2550.00"), "demandaId": 1},
+        {"valor": D("2550.00"), "demandaId": True},
+        {"valor": D("2550.00"), "demandaId": []},
+        {"valor": "2550.00"},
+        {"valor": 0},
+        {"valor": D("0.00")},
+        {"valor": -1},
+        {"valor": D("-0.01")},
+        {"valor": D("2550.001")},
+        {"valor": 2550.0},
+        {"valor": True},
+        {"valor": False},
+        {"valor": MAX_VALOR + D("0.01")},
+        {"valor": D("2550.00"), "extra": 1},
+        {"demandaId": "dem-1"},
+        {},
+        None,
+        [],
+    ]
+    for caso in invalidos:
+        with pytest.raises(EventoInvalido):
+            corpo_lance(caso)
+
+
 def test_oferta_leilao_e_detalhe_leilao_formatam_campos_e_aplicam_sigilo():
     ofertas = _ofertas_l1()
     proj_oferta = oferta_leilao(ofertas[0])
@@ -529,7 +613,7 @@ def test_oferta_leilao_e_detalhe_leilao_formatam_campos_e_aplicam_sigilo():
     assert "pedidoId" not in proj_oferta
 
     leilao = _negociacao_leilao(compradorId=COMP_Y)
-    detalhe_terceiro = detalhe_leilao(leilao, ofertas, Ator("u1", COMP_X, "BUYER"), T0)
+    detalhe_terceiro = detalhe_leilao(leilao, ofertas, None, Ator("u1", COMP_X, "BUYER"), T0)
     assert detalhe_terceiro["quantidadeTotal"] == D("20.00")
     assert detalhe_terceiro["precoInicial"] == D("2550.00")
     assert detalhe_terceiro["incrementoMinimo"] == D("25.50")
@@ -542,9 +626,34 @@ def test_oferta_leilao_e_detalhe_leilao_formatam_campos_e_aplicam_sigilo():
     assert "melhorLanceId" not in detalhe_terceiro
     assert "correlationId" not in detalhe_terceiro
 
-    detalhe_fornecedor = detalhe_leilao(leilao, ofertas, Ator("u2", FORN_A, "SUPPLIER"), T0)
+    detalhe_fornecedor = detalhe_leilao(leilao, ofertas, None, Ator("u2", FORN_A, "SUPPLIER"), T0)
     assert detalhe_fornecedor["compradorId"] == COMP_Y
     assert detalhe_fornecedor["acoesPermitidas"] == []
+
+    melhor = {
+        "lanceId": "33000000-0000-4000-8000-000000000002",
+        "negociacaoId": L1,
+        "compradorId": COMP_Y,
+        "usuarioId": "c3000000-0000-4000-8000-000000000002",
+        "valor": D("2600"),
+        "demandaId": "36000000-0000-4000-8000-000000000002",
+        "sequencia": 2,
+        "criadoEm": T0,
+    }
+    leilao_com_lance = _negociacao_leilao(melhorLanceId=melhor["lanceId"], totalLances=2)
+    detalhe_concorrente = detalhe_leilao(leilao_com_lance, ofertas, melhor, Ator("u1", COMP_X, "BUYER"), T0)
+    assert detalhe_concorrente["melhorLance"] == {
+        "lanceId": melhor["lanceId"],
+        "negociacaoId": L1,
+        "compradorId": "OCULTO",
+        "valor": D("2600.00"),
+        "sequencia": 2,
+        "criadoEm": T0,
+    }
+    detalhe_autor = detalhe_leilao(leilao_com_lance, ofertas, melhor, Ator("u3", COMP_Y, "BUYER"), T0)
+    assert detalhe_autor["melhorLance"]["compradorId"] == COMP_Y
+    detalhe_forn_com_lance = detalhe_leilao(leilao_com_lance, ofertas, melhor, Ator("u2", FORN_A, "SUPPLIER"), T0)
+    assert detalhe_forn_com_lance["melhorLance"]["compradorId"] == COMP_Y
 
     assert pedido_temporario_leilao(leilao, ofertas[0]) == {
         "negociacaoId": L1,
@@ -585,4 +694,202 @@ def test_validar_evento_leilao_iniciado_aceita_percentual_com_muitas_casas_e_zer
 def test_validar_evento_leilao_iniciado_recusa_casos_invalidos(caminho, valor):
     with pytest.raises(EventoInvalido):
         validar_evento("leilao_iniciado", _com(evento_l1(), caminho, valor))
+
+
+# ---------------------------------------------------------------- rateio e negociacao_fechada (RN-10, RN-11)
+
+def _oferta_rateio(fornecimento_id: str, fornecedor_id: str, pedido_id: str, quantidade: str, valor_item: str,
+                   ordem: int) -> dict:
+    return {
+        "negociacaoId": L1,
+        "fornecimentoId": fornecimento_id,
+        "fornecedorId": fornecedor_id,
+        "pedidoId": pedido_id,
+        "quantidade": D(quantidade),
+        "precoUnitario": D(valor_item) / D(quantidade),
+        "valorItem": D(valor_item),
+        "participacao": D("0.5000"),
+        "ordem": ordem,
+        "situacao": "CONFIRMADA",
+    }
+
+
+def test_ratear_tres_exemplos_da_rn11():
+    # Exemplo 1 da RN-11 (CA-20): V = 2600.00 com 600.00 (5.00 x 120.00) e 1950.00 (15.00 x 130.00) -> 611.76 e 1988.24.
+    lote_l1 = _ofertas_l1()
+    aloc_1 = ratear(D("2600.00"), D("2550.00"), lote_l1)
+    assert aloc_1 == [
+        {
+            "fornecimentoId": OF_A,
+            "fornecedorId": FORN_A,
+            "pedidoId": PT_A,
+            "quantidade": D("5.00"),
+            "valorUnitario": D("122.35"),
+            "valorTotal": D("611.76"),
+        },
+        {
+            "fornecimentoId": OF_B,
+            "fornecedorId": FORN_B,
+            "pedidoId": PT_B,
+            "quantidade": D("15.00"),
+            "valorUnitario": D("132.55"),
+            "valorTotal": D("1988.24"),
+        },
+    ]
+    assert sum(a["valorTotal"] for a in aloc_1) == D("2600.00")
+
+    # Exemplo 2 da RN-11 (CA-23): V = 1000.01 com 120.00, 130.00 e 110.00 -> 333.33, 361.13 (recebe +0.02) e 305.55.
+    lote_l3 = [
+        _oferta_rateio(OF_A, FORN_A, PT_A, "1.00", "120.00", 1),
+        _oferta_rateio(OF_B, FORN_B, PT_B, "1.00", "130.00", 2),
+        _oferta_rateio(OF_D, FORN_C, PT_D, "1.00", "110.00", 3),
+    ]
+    aloc_2 = ratear(D("1000.01"), D("360.00"), lote_l3)
+    assert [a["valorTotal"] for a in aloc_2] == [D("333.33"), D("361.13"), D("305.55")]
+    assert [a["valorUnitario"] for a in aloc_2] == [D("333.33"), D("361.13"), D("305.55")]
+    assert sum(a["valorTotal"] for a in aloc_2) == D("1000.01")
+
+    # Exemplo 3 da RN-11 (D36): V = 780.00 com 480.00 e 300.00 -> 480.00 e 300.00 (proporção exata evita 299.98).
+    lote_780 = [
+        _oferta_rateio(OF_A, FORN_A, PT_A, "4.00", "480.00", 1),
+        _oferta_rateio(OF_B, FORN_B, PT_B, "3.00", "300.00", 2),
+    ]
+    aloc_3 = ratear(D("780.00"), D("780.00"), lote_780)
+    assert [a["valorTotal"] for a in aloc_3] == [D("480.00"), D("300.00")]
+    assert [a["valorUnitario"] for a in aloc_3] == [D("120.00"), D("100.00")]
+    assert sum(a["valorTotal"] for a in aloc_3) == D("780.00")
+
+
+def test_ratear_ca51_ca23_uma_oferta_empate_e_quatro_casas_do_banco():
+    # CA-51: lance 0.30 sobre lote 0.10 + 0.20 -> 0.10 e 0.20.
+    lote_ca51 = [
+        _oferta_rateio(OF_A, FORN_A, PT_A, "1.00", "0.10", 1),
+        _oferta_rateio(OF_B, FORN_B, PT_B, "1.00", "0.20", 2),
+    ]
+    aloc_ca51 = ratear(D("0.30"), D("0.30"), lote_ca51)
+    assert [a["valorTotal"] for a in aloc_ca51] == [D("0.10"), D("0.20")]
+    assert [a["valorUnitario"] for a in aloc_ca51] == [D("0.10"), D("0.20")]
+    assert sum(a["valorTotal"] for a in aloc_ca51) == D("0.30")
+
+    # CA-23 (lote recalculado com uma única oferta): V = 700.00 sobre OF-A (5.00 x 120.00 = 600.00) -> 700.00 e 140.00.
+    aloc_unica = ratear(D("700.00"), D("600.00"), [_ofertas_l1()[0]])
+    assert aloc_unica == [
+        {
+            "fornecimentoId": OF_A,
+            "fornecedorId": FORN_A,
+            "pedidoId": PT_A,
+            "quantidade": D("5.00"),
+            "valorUnitario": D("140.00"),
+            "valorTotal": D("700.00"),
+        }
+    ]
+
+    # Empate de maior valorItem: a sobra vai para a oferta de menor posição (ordem).
+    lote_empate = [
+        _oferta_rateio(OF_A, FORN_A, PT_A, "1.00", "100.00", 1),
+        _oferta_rateio(OF_B, FORN_B, PT_B, "1.00", "100.00", 2),
+        _oferta_rateio(OF_D, FORN_C, PT_D, "1.00", "100.00", 3),
+    ]
+    aloc_empate = ratear(D("300.01"), D("300.00"), lote_empate)
+    assert [a["valorTotal"] for a in aloc_empate] == [D("100.01"), D("100.00"), D("100.00")]
+    assert sum(a["valorTotal"] for a in aloc_empate) == D("300.01")
+
+    # Lance e valores com 4 casas vindos do banco (NUMERIC(18,4)) saem com exatamente 2 casas.
+    lote_4_casas = [
+        {**_ofertas_l1()[0], "valorItem": D("600.0000")},
+        {**_ofertas_l1()[1], "valorItem": D("1950.0000")},
+    ]
+    aloc_4_casas = ratear(D("2600.0000"), D("2550.0000"), lote_4_casas)
+    assert [a["valorTotal"] for a in aloc_4_casas] == [D("611.76"), D("1988.24")]
+    for item in aloc_4_casas:
+        for campo in ("quantidade", "valorUnitario", "valorTotal"):
+            assert item[campo].as_tuple().exponent == -2
+
+
+@pytest.mark.parametrize("lote,lances", [
+    (
+        [("1.00", "0.10"), ("1.00", "0.20")],
+        [D("0.30"), D("0.31"), D("0.35"), D("1.00")],
+    ),
+    (
+        [("5.00", "600.00"), ("15.00", "1950.00")],
+        [D("2550.00"), D("2550.01"), D("2600.00"), D("2777.77")],
+    ),
+    (
+        [("1.00", "120.00"), ("1.00", "130.00"), ("1.00", "110.00")],
+        [D("360.00"), D("360.01"), D("360.02"), D("1000.01")],
+    ),
+    (
+        [("4.00", "480.00"), ("3.00", "300.00")],
+        [D("780.00"), D("780.01"), D("999.99")],
+    ),
+    (
+        [("1.00", "0.01"), ("1.00", "1000.00")],
+        [D("1000.01"), D("1000.02"), D("1500.00")],
+    ),
+])
+def test_ratear_soma_igual_ao_lance_e_nenhuma_oferta_abaixo_do_valor_item(lote, lances):
+    ofertas = [
+        _oferta_rateio(f"of-{i}", f"forn-{i}", f"pt-{i}", qtd, valor_item, i)
+        for i, (qtd, valor_item) in enumerate(lote, start=1)
+    ]
+    preco_inicial = sum((o["valorItem"] for o in ofertas), D("0.00"))
+    for valor_lance in lances:
+        assert valor_lance >= preco_inicial
+        alocacoes = ratear(valor_lance, preco_inicial, ofertas)
+        assert sum(a["valorTotal"] for a in alocacoes) == valor_lance
+        for oferta, aloc in zip(ofertas, alocacoes):
+            assert aloc["valorTotal"] >= oferta["valorItem"]
+
+
+def test_negociacao_fechada_com_e_sem_demanda_id():
+    alocacoes = ratear(D("2600.00"), D("2550.00"), _ofertas_l1())
+    leilao_encerrado = _negociacao_leilao(status="ENCERRADO", compradorId=COMP_Y)
+
+    # Leilão ENCERRADO com demanda_id do lance vencedor.
+    com_demanda = negociacao_fechada(leilao_encerrado, alocacoes, DEM_Y)
+    assert com_demanda == {
+        "negociacaoId": L1,
+        "tipo": "LEILAO",
+        "status": "ENCERRADO",
+        "compradorId": COMP_Y,
+        "demandaId": DEM_Y,
+        "produtoId": P,
+        "alocacoes": alocacoes,
+    }
+
+    # Leilão ENCERRADO sem demanda_id (None).
+    sem_demanda = negociacao_fechada(leilao_encerrado, alocacoes)
+    assert sem_demanda["compradorId"] == COMP_Y
+    assert sem_demanda["demandaId"] is None
+    assert sem_demanda["alocacoes"] == alocacoes
+
+    # Leilão DESERTO: compradorId e demandaId saem sempre None.
+    leilao_deserto = _negociacao_leilao(status="DESERTO", compradorId=COMP_Y)
+    assert negociacao_fechada(leilao_deserto, [], DEM_Y) == {
+        "negociacaoId": L1,
+        "tipo": "LEILAO",
+        "status": "DESERTO",
+        "compradorId": None,
+        "demandaId": None,
+        "produtoId": P,
+        "alocacoes": [],
+    }
+
+    # Direta ENCERRADO (sem demanda_id) e RECUSADO.
+    direta_encerrada = _negociacao_direta(status="ENCERRADO", compradorId=COMP_X)
+    aloc_direta = [alocacao(direta_encerrada, D("125.00"))]
+    assert negociacao_fechada(direta_encerrada, aloc_direta) == {
+        "negociacaoId": D1,
+        "tipo": "VENDA_DIRETA",
+        "status": "ENCERRADO",
+        "compradorId": COMP_X,
+        "demandaId": None,
+        "produtoId": P,
+        "alocacoes": aloc_direta,
+    }
+    direta_recusada = _negociacao_direta(status="RECUSADO", compradorId=COMP_X)
+    assert negociacao_fechada(direta_recusada, [], DEM_Y)["compradorId"] is None
+    assert negociacao_fechada(direta_recusada, [], DEM_Y)["demandaId"] is None
+
 

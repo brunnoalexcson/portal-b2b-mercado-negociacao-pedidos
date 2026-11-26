@@ -9,7 +9,7 @@ from app.http import ERROS
 from app.jsonio import formato_json, loads
 from app.portas import RepositorioIndisponivel
 from tests.cenarios import (
-    AUSENTE, COMP_X, COMP_Y, CONTRATOS, CORR_D1, D1, FORN_A, FORN_B, FORN_C, L1, OF_B, OF_D, P, PT_A, PT_D,
+    AUSENTE, COMP_X, COMP_Y, CONTRATOS, CORR_D1, D1, FORN_A, FORN_B, FORN_C, L1, OF_A, OF_B, OF_D, P, PT_A, PT_D,
     Ambiente, confirmar_reserva, evento_d1, evento_pedido_atualizado, exemplo, recusar_reserva, t, token,
     validar_erro_rfc7807, validar_schema,
 )
@@ -642,10 +642,12 @@ def test_ca52_formato_de_erro_em_todos_os_codigos_da_parte_2():
     """CA-52: Todas as respostas 4xx e 5xx seguem application/problem+json e o catálogo do §10."""
     amb = Ambiente("12:00:00")
     amb.abrir_d1()
+    amb.inserir_l1()
     with amb.repo.transacao():
-        leilao = copy.deepcopy(amb.repo.obter_negociacao(D1))
-        leilao.update(negociacaoId=L1, modo="LEILAO_DIRETO")
-        amb.repo.inserir_negociacao(leilao)
+        amb.repo.inserir_oferta_leilao({
+            "negociacaoId": L1, "fornecimentoId": OF_A, "fornecedorId": FORN_A, "quantidade": D("5.00"),
+            "precoUnitario": D("120.00"), "valorItem": D("600.00"), "participacao": D("0.2353"), "ordem": 1,
+            "situacao": "CONFIRMADA", "pedidoId": PT_A})
 
     d2 = "31000000-0000-4000-8000-000000000022"
     msg_d2 = evento_d1(negociacaoId=d2, compraImediata=True)
@@ -664,6 +666,8 @@ def test_ca52_formato_de_erro_em_todos_os_codigos_da_parte_2():
         amb.post(f"/api/v1/negociacoes/{D1}/aceitar", escopo="BUYER", empresa=COMP_X),
         amb.post(f"/api/v1/negociacoes/{D1}/propostas", {"precoUnitario": D("130.01")}, "BUYER", COMP_X),
         amb.post(f"/api/v1/negociacoes/{d2}/recusar", escopo="BUYER", empresa=COMP_X),
+        amb.post(f"/api/v1/negociacoes/{L1}/lances", {"valor": D("3000.00")}, "BUYER", FORN_A),
+        amb.post(f"/api/v1/negociacoes/{L1}/lances", {"valor": D("2549.99")}, "BUYER", COMP_X),
     ]
     assert amb.post(
         f"/api/v1/negociacoes/{D1}/propostas", {"precoUnitario": D("125.00")}, "BUYER", COMP_X,
@@ -675,6 +679,8 @@ def test_ca52_formato_de_erro_em_todos_os_codigos_da_parte_2():
     ))
     assert amb.post(f"/api/v1/negociacoes/{D1}/recusar", escopo="BUYER", empresa=COMP_X).status_code == 200
     respostas.append(amb.post(f"/api/v1/negociacoes/{D1}/recusar", escopo="BUYER", empresa=COMP_X))
+    amb.em("15:00:00")
+    respostas.append(amb.post(f"/api/v1/negociacoes/{L1}/lances", {"valor": D("3000.00")}, "BUYER", COMP_X))
 
     amb.repo.falhar("obter_negociacao", RuntimeError("falha"), vezes=1)
     respostas.append(amb.get(f"/api/v1/negociacoes/{D1}", "BUYER", COMP_X))
