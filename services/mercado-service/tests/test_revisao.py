@@ -136,3 +136,60 @@ def test_lote_respeita_o_limite_monetario_sozinho():
                         ofertas)
     assert [(i["fornecimentoId"], i["valorItem"]) for i in itens] == [
         ("a", D("60000000000000.00")), ("c", D("1.00"))]
+
+
+# ---------------------------------------------------------------- segunda revisão (DG-69)
+
+def test_unidade_e_conferida_com_o_produto_ja_bloqueado():
+    from tests.cenarios import OF_W
+    amb = Ambiente().cenario_s()
+
+    def produto_mudou_na_outra_replica():
+        amb.repo.salvar_produto({"produtoId": P, "nome": "Milho em grão", "unidade": "KG",
+                                 "atualizadoEm": t("12:00:30")})
+    _apos_bloqueio(amb.repo, "bloquear_produto", P, produto_mudou_na_outra_replica)
+    assert amb.oferta(OF_W, hora="12:01") == "dlt"
+    with amb.repo.transacao():
+        assert amb.repo.obter_oferta(OF_W) is None
+
+
+def test_prazo_da_janela_usa_o_instante_de_depois_do_bloqueio():
+    from tests.cenarios import erro
+    amb = Ambiente().cenario_e()
+    amb.oferta(OF_V, FORN_Z, P, "8.30", "10.00", origem=None, hora="11:58")
+    s1 = amb.sugestao_ativa()["sugestaoId"]
+    amb.aceitar(FORN_X, s1, OF_X, "60.00", hora="12:00")
+    amb.em("12:59:59.999")
+
+    def espera_ate_depois_da_janela():
+        amb.clock.agora = t("13:00:01")
+    _apos_bloqueio(amb.repo, "bloquear_produto", P, espera_ate_depois_da_janela)
+    assert erro(amb.aceitar, FORN_Y, s1, OF_Y, "40.00") == "SUGESTAO_ENCERRADA"
+
+
+def test_paginacao_com_numero_longo_responde_422():
+    import pytest
+    from types import SimpleNamespace
+    from app.dominio import ErroMercado
+    from app.http import paginacao
+    for texto in ("9" * 4301, "1" * 10):
+        with pytest.raises(ErroMercado) as exc:
+            paginacao(SimpleNamespace(query_params={"page": texto}))
+        assert exc.value.codigo == "VALIDACAO_INVALIDA"
+    assert paginacao(SimpleNamespace(query_params={"page": "999999999", "size": "100"})) == (999999999, 100)
+
+
+def test_idempotencia_usa_o_instante_de_depois_do_bloqueio_da_chave():
+    from app.dominio import Idempotencia
+    amb = Ambiente().cenario_s()
+    primeira = amb.direta(COMP_A, DEM_A, OF_Y, "30.00", idempotencia=Idempotencia("k", "hash-30", 201))
+    original = amb.repo.obter_idempotencia
+
+    def obter_depois_da_espera(escopo):
+        registro = original(escopo)
+        amb.clock.agora = t("2026-11-21T12:00:01.000Z")   # a chave vence às 12:00 do dia seguinte
+        return registro
+    amb.repo.obter_idempotencia = obter_depois_da_espera
+    amb.em("2026-11-21T11:59:59.999Z")
+    segunda = amb.direta(COMP_A, DEM_A, OF_X, "10.00", idempotencia=Idempotencia("k", "hash-10", 201))
+    assert segunda["negociacaoId"] != primeira["negociacaoId"]

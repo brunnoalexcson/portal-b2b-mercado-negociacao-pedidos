@@ -4,13 +4,13 @@ Responsável: Brunno Alexcson. Porta `8105`, rotas `/api/v1/mercado`, schema Pos
 
 O serviço acompanha, por produto, a oferta disponível e a demanda aberta do portal e decide como cada compra é negociada: negociação direta entre um comprador e a oferta que ele escolher, ou leilão em lote quando a demanda supera a oferta e os fornecedores aceitam a sugestão de leilão. É o bloco 5 do diagrama da arquitetura ("calcula oferta vs demanda, define modo de negociação, inicia leilões quando necessário").
 
-## Situação em 25/11/2026 (v0.10)
+## Situação em 26/11/2026 (v0.11)
 
 | Item | Situação |
 |---|---|
-| Especificação (ESP-MRC-001 v0.10) | Rascunho no modelo ERS-LLM v1.2 do QA, antes do gate G1; 17 RFs, 59 CAs, decisões DG-01 a DG-68 |
+| Especificação (ESP-MRC-001 v0.11) | Rascunho no modelo ERS-LLM v1.2 do QA, antes do gate G1; 17 RFs, 59 CAs, decisões DG-01 a DG-69 |
 | Contratos de eventos | Schemas JSON e exemplos validados para os 12 tópicos; conferidos contra os contratos do Pedidos e do Fornecimento |
-| Código (`services/mercado-service/`) | Não iniciado; segue a estrutura do `pedidos-service` |
+| Código (`services/mercado-service/`) | Implementado na estrutura do `pedidos-service`: 201 testes automatizados (Python 3.12, no build Docker) e fluxo real validado na demonstração local com duas réplicas, Redpanda e PostgreSQL. Falta rodar no kit, que depende da criação dos tópicos (INT-MRC-03), e a evidência de concorrência com duas réplicas reais para os RNFs no gate G2 |
 | Alinhamento com Pedidos | Fechado em 19/11 (INT-MRC-02): a ESP-PED-001 não muda |
 | Alinhamento com Fornecimento e Produtos | Fechado em 25/11 (INT-MRC-05): o contrato de eventos v2.5 (23/11) registra o Mercado como consumidor dos 5 eventos de produto e oferta; o documento de requisitos (v0.13) e a ESP-PRD-001 (v2.3) foram alinhados no PR #45 e a issue #44 de `davicalvarenga/Sistema-MicServ-SD` foi fechada |
 | Alinhamento com Compra e Demanda | Issues [#1](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/1) e [#2](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/2) abertas em 25/11 (INT-MRC-04), **aguardando resposta do Lucca** |
@@ -20,7 +20,7 @@ O serviço acompanha, por produto, a oferta disponível e a demanda aberta do po
 
 ## Documentos
 
-- [Especificação ESP-MRC-001](requisitos.md): regras, rotas, eventos, erros, critérios de aceitação e decisões DG-01 a DG-68, pendências de integração INT-MRC-01 a INT-MRC-11 e pontos fora desta versão (seção 13).
+- [Especificação ESP-MRC-001](requisitos.md): regras, rotas, eventos, erros, critérios de aceitação e decisões DG-01 a DG-69, pendências de integração INT-MRC-01 a INT-MRC-11 e pontos fora desta versão (seção 13).
 - [Contratos de eventos](contratos/): um `<topico>.schema.json` (JSON Schema 2020-12) e um `<topico>.exemplo.json` por tópico consumido e publicado.
 
 ## Como o serviço funciona

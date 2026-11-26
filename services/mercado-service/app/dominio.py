@@ -212,15 +212,21 @@ class Mercado:
     # ------------------------------------------------------------ apoio
 
     def _bloquear(self, op: _Operacao, *produtos: str):
-        for produto in sorted(set(produtos) - op.bloqueados):
+        novos = sorted(set(produtos) - op.bloqueados)
+        for produto in novos:
             self.repo.bloquear_produto(produto)
             op.bloqueados.add(produto)
+        if novos:
+            op.agora = self.agora()   # DG-69: o prazo é conferido com o instante de depois da espera
 
     def _bloquear_ids(self, op: _Operacao, *ids: str):
         """IDs de demanda ou modelo (RN-08, RN-09), sempre antes dos produtos, em ordem fixa."""
-        for demanda_id in sorted(set(ids) - op.ids_bloqueados):
+        novos = sorted(set(ids) - op.ids_bloqueados)
+        for demanda_id in novos:
             self.repo.bloquear_id_demanda(demanda_id)
             op.ids_bloqueados.add(demanda_id)
+        if novos:
+            op.agora = self.agora()   # DG-69
 
     def _publicar(self, op: _Operacao):
         for topico, chave, mensagem in op.eventos:
@@ -383,9 +389,26 @@ class Mercado:
         self._contar(topico, "dlt")
         return "dlt"
 
+    def _bloquear_antes_da_unidade(self, op: _Operacao, topico: str, p: dict):
+        """RN-03 e DG-69: a unidade é comparada com o produto já bloqueado, na ordem da DG-68 (IDs antes dos
+        produtos). O modelo recorrente não bloqueia o produto (§13.1)."""
+        if topico == "demanda_criada":
+            self._bloquear_ids(op, p["demandaId"])
+            if p["tipo"] == "RECORRENTE":
+                return
+        elif topico == "demanda_recorrente_gerada":
+            self._bloquear_ids(op, p["demandaId"], p["ocorrenciaId"])
+        produtos = {p["produtoId"]}
+        if topico == "fornecimento_atualizado":
+            atual = self.repo.obter_oferta(p["fornecimentoId"])
+            if atual is not None:
+                produtos.add(atual["produtoId"])
+        self._bloquear(op, *produtos)
+
     def _aplicar(self, op: _Operacao, evento: contratos.Evento) -> str:
         payload = evento.payload
         if evento.topico in TOPICOS_COM_UNIDADE:
+            self._bloquear_antes_da_unidade(op, evento.topico, payload)
             produto = self.repo.obter_produto(payload["produtoId"])
             if produto is not None and produto["unidade"] != payload["unidade"]:
                 raise EventoInvalido(contratos.UNIDADE_DIFERENTE)
@@ -656,11 +679,12 @@ class Mercado:
 
     # ------------------------------------------------------------ idempotência (RN-30)
 
-    def _replay(self, idempotencia: Idempotencia | None, agora: datetime):
+    def _replay(self, idempotencia: Idempotencia | None, op: _Operacao):
         if idempotencia is None:
             return None
         registro = self.repo.obter_idempotencia(idempotencia.escopo)
-        if registro is None or registro["criadoEm"] + timedelta(hours=24) <= agora:
+        op.agora = self.agora()   # DG-69: obter_idempotencia espera o bloqueio da chave entre as réplicas
+        if registro is None or registro["criadoEm"] + timedelta(hours=24) <= op.agora:
             return None
         if registro["hashCorpo"] != idempotencia.hash_corpo:
             raise ErroMercado("IDEMPOTENCIA_CONFLITO")
@@ -833,7 +857,7 @@ class Mercado:
         repo = self.repo
         with repo.transacao():
             op = _Operacao(self.agora(), correlacao)
-            memorizada = self._replay(idempotencia, op.agora)
+            memorizada = self._replay(idempotencia, op)
             if memorizada is not None:
                 return memorizada
             demanda = repo.obter_demanda(demanda_id)
@@ -906,7 +930,7 @@ class Mercado:
             sugestao = repo.obter_sugestao(sugestao_id)
             if sugestao is None:
                 raise ErroMercado("SUGESTAO_NAO_ENCONTRADA")
-            memorizada = self._replay(idempotencia, op.agora)
+            memorizada = self._replay(idempotencia, op)
             if memorizada is not None:
                 return memorizada
             produto_id = sugestao["produtoId"]

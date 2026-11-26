@@ -22,7 +22,7 @@ log = logging.getLogger("app.http")
 PREFIXO = "/api/v1/mercado"
 ID_HTTP = re.compile(r"[A-Za-z0-9._-]{1,64}")
 CHAVE_HTTP = re.compile(r"[A-Za-z0-9._-]{1,128}")
-INTEIRO = re.compile(r"[0-9]+")
+INTEIRO = re.compile(r"[0-9]{1,9}")   # page e size: até 9 dígitos (§7.2)
 COMPRADOR, FORNECEDOR = ("BUYER",), ("SUPPLIER",)
 AMBOS = ("BUYER", "SUPPLIER")
 
@@ -259,13 +259,24 @@ def _rotas() -> APIRouter:
     id_schema = {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$"}
     qtd_schema = {"type": "number", "exclusiveMinimum": 0, "maximum": 9999999999.99}
 
+    def query_openapi(*parametros):
+        # Só documenta os parâmetros de query no /docs; a validação continua no serviço (§7.2, §10).
+        return {"parameters": [{"name": nome, "in": "query", "required": False, "description": descricao,
+                                "schema": schema} for nome, schema, descricao in parametros]}
+
+    pagina_openapi = (
+        ("page", {"type": "integer", "minimum": 1, "maximum": 999999999, "default": 1}, "Página, a partir de 1."),
+        ("size", {"type": "integer", "minimum": 1, "maximum": 100, "default": 10}, "Itens por página, até 100."))
+
     @rota.get("/produtos/{produtoId}/balanco")
     async def balanco(request: Request, produtoId: str):
         def acao(ctx, ator, _):
             return json_response(ctx.mercado.balanco(validar_id(produtoId)))
         return await executar(request, "/api/v1/mercado/produtos/{produtoId}/balanco", AMBOS, acao)
 
-    @rota.get("/produtos/{produtoId}/ofertas")
+    @rota.get("/produtos/{produtoId}/ofertas", openapi_extra=query_openapi(
+        ("demandaId", id_schema, "Só com escopo BUYER: demanda própria para calcular `apta` (RN-07)."),
+        *pagina_openapi))
     async def ofertas(request: Request, produtoId: str):
         def acao(ctx, ator, _):
             demanda = request.query_params.get("demandaId")
@@ -304,7 +315,10 @@ def _rotas() -> APIRouter:
                                  {"Location": f"{PREFIXO}/negociacoes/{resposta['negociacaoId']}"})
         return await executar(request, "/api/v1/mercado/negociacoes", COMPRADOR, acao, com_corpo=True)
 
-    @rota.get("/negociacoes")
+    @rota.get("/negociacoes", openapi_extra=query_openapi(
+        ("modo", {"type": "string", "enum": ["VENDA_DIRETA", "LEILAO_DIRETO"]}, "Filtro opcional."),
+        ("situacao", {"type": "string", "enum": ["ABERTA", "CONCLUIDA", "SEM_ACORDO"]}, "Filtro opcional."),
+        *pagina_openapi))
     async def listar(request: Request):
         def acao(ctx, ator, _):
             modo = filtro(request, "modo", ("VENDA_DIRETA", "LEILAO_DIRETO"))
@@ -320,7 +334,7 @@ def _rotas() -> APIRouter:
             return json_response(ctx.mercado.negociacao(ator.empresa, ator.escopo, validar_uuid(negociacaoId)))
         return await executar(request, "/api/v1/mercado/negociacoes/{negociacaoId}", AMBOS, acao)
 
-    @rota.get("/sugestoes-leilao")
+    @rota.get("/sugestoes-leilao", openapi_extra=query_openapi(*pagina_openapi))
     async def sugestoes(request: Request):
         def acao(ctx, ator, _):
             pagina, tamanho = paginacao(request)

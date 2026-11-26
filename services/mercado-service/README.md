@@ -1,6 +1,6 @@
 # Mercado (Matching Engine) do Portal B2B
 
-Implementação da [ESP-MRC-001 v0.8](../../docs/mercado/requisitos.md). O serviço mantém cópias locais de produtos, ofertas e demandas, calcula o balanço por produto e define o modo de negociação. Quando o comprador pede, abre uma negociação direta; quando a demanda supera a oferta, forma um leilão em lote a partir da sugestão aceita pelos fornecedores. Publica `modo_negociacao_definido`, `leilao_iniciado` e `mercado.dlt`.
+Implementação da [ESP-MRC-001 v0.11](../../docs/mercado/requisitos.md). O serviço mantém cópias locais de produtos, ofertas e demandas, calcula o balanço por produto e define o modo de negociação. Quando o comprador pede, abre uma negociação direta; quando a demanda supera a oferta, forma um leilão em lote a partir da sugestão aceita pelos fornecedores. Publica `modo_negociacao_definido`, `leilao_iniciado` e `mercado.dlt`.
 
 ## Estrutura
 
@@ -25,7 +25,7 @@ A suíte de aceitação usa dublês das portas e roda sem infraestrutura. Os tes
 wsl sh -c 'docker build --target test --build-context contratos=docs/mercado/contratos -t mercado-service:test services/mercado-service'
 ```
 
-Resultado esperado: `186 passed, 4 skipped` (os 4 testes de `tests/test_fluxo_real.py` só rodam dentro da demonstração).
+Resultado esperado: `201 passed, 4 skipped` (os 4 testes de `tests/test_fluxo_real.py` só rodam dentro da demonstração).
 
 ## Demonstração local
 
