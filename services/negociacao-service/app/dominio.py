@@ -11,6 +11,7 @@ from app.portas import Clock, EventBus, NegociacaoRepositorio, RepositorioIndisp
 
 log = logging.getLogger(__name__)
 PRAZO_RESPOSTA = timedelta(hours=48)
+VALIDADE_IDEMPOTENCIA = timedelta(hours=24)
 FINAIS = ("ENCERRADO", "DESERTO", "RECUSADO", "EXPIRADO")
 
 
@@ -29,6 +30,14 @@ class Ator:
     escopo: str
 
 
+@dataclass(frozen=True)
+class Idempotencia:
+    """RN-18: escopo da chave, hash do corpo da requisição e status da resposta de sucesso."""
+    escopo: str
+    hash_corpo: str
+    status: int
+
+
 # ---------------------------------------------------------------- regras puras
 
 def utc(instante: datetime) -> datetime:
@@ -45,10 +54,14 @@ def visivel(negociacao: dict, ator: Ator) -> bool:
     return negociacao["modo"] == "LEILAO_DIRETO" or participante(negociacao, ator)
 
 
+def aceitando(negociacao: dict, agora: datetime) -> bool:
+    """RN-12: o prazo vencido já recusa ações antes de `executar_prazos` mudar o status."""
+    return negociacao["status"] == "ABERTO" and agora < negociacao["expiraEm"]
+
+
 def acoes_permitidas(negociacao: dict, ator: Ator, agora: datetime) -> list[str]:
     """RN-17 na negociação direta; na compra imediata ninguém age (RN-24)."""
-    aceitando = negociacao["status"] == "ABERTO" and agora < negociacao["expiraEm"]
-    if negociacao["compraImediata"] or not aceitando or not participante(negociacao, ator):
+    if negociacao["compraImediata"] or not aceitando(negociacao, agora) or not participante(negociacao, ator):
         return []
     da_vez = ator.escopo == negociacao["vez"]
     acoes = ["PROPOR"] if da_vez else []
@@ -127,8 +140,7 @@ class Negociacoes:
                     op = _Operacao(self.agora(), evento.correlation_id)
                     resultado = aplicar(op, evento.payload)
                     self.repo.registrar_evento_processado(evento.source, evento.event_id, topico)
-                    for topico_saida, chave, envelope in op.eventos:
-                        self.bus.publish(topico_saida, chave, envelope)
+                    self._enviar(op)
                 return resultado
             except RepositorioIndisponivel:
                 raise
@@ -154,6 +166,11 @@ class Negociacoes:
         except Exception:
             log.exception("Falha ao publicar em negociacao.dlt", extra={"correlationId": envelope["correlationId"]})
         return "dlt"
+
+    def _enviar(self, op: _Operacao):
+        """Último passo da transação (§5.1): validar → alterar → publicar."""
+        for topico, chave, envelope in op.eventos:
+            self.bus.publish(topico, chave, envelope)
 
     def _publicar(self, op: _Operacao, topico: str, negociacao: dict, payload: dict):
         chave = negociacao["negociacaoId"]
@@ -237,3 +254,97 @@ class Negociacoes:
                 raise ErroNegocio("MODO_INCOMPATIVEL")
             itens, total = self.repo.listar_propostas(negociacao_id, (pagina - 1) * tamanho, tamanho)
         return {"items": [proposta(p) for p in itens], "page": pagina, "size": tamanho, "total": total}
+
+    # ------------------------------------------------------------ ações da direta (RF-07 a RF-09, RN-18)
+
+    def propor(self, ator: Ator, negociacao_id: str, preco, correlacao: str,
+               idempotencia: Idempotencia | None = None) -> dict:
+        def regra(op, negociacao):
+            self._na_vez(negociacao, ator)
+            if preco > negociacao["precoOferta"]:
+                raise ErroNegocio("PROPOSTA_ACIMA_DA_OFERTA")
+            nova = {"propostaId": str(uuid4()), "negociacaoId": negociacao_id, "autor": ator.escopo,
+                    "empresaId": ator.empresa, "precoUnitario": preco,
+                    "sequencia": negociacao["totalPropostas"] + 1, "criadoEm": op.agora}
+            self.repo.inserir_proposta(nova)
+            negociacao.update(vez="SUPPLIER" if ator.escopo == "BUYER" else "BUYER", precoAtual=preco,
+                              expiraEm=op.agora + PRAZO_RESPOSTA, totalPropostas=nova["sequencia"])
+            self.repo.atualizar_negociacao(negociacao)
+            return proposta(nova)
+        return self._agir(ator, negociacao_id, correlacao, idempotencia, regra)
+
+    def aceitar(self, ator: Ator, negociacao_id: str, correlacao: str,
+                idempotencia: Idempotencia | None = None) -> dict:
+        def regra(op, negociacao):
+            self._na_vez(negociacao, ator)
+            if negociacao["reservaSituacao"] != "CONFIRMADA":
+                raise ErroNegocio("RESERVA_PENDENTE")
+            self._fechar(op, negociacao, "ENCERRADO", [alocacao(negociacao, negociacao["precoAtual"])])
+            return detalhe_direta(negociacao, ator, op.agora)
+        return self._agir(ator, negociacao_id, correlacao, idempotencia, regra)
+
+    def recusar(self, ator: Ator, negociacao_id: str, correlacao: str,
+                idempotencia: Idempotencia | None = None) -> dict:
+        def regra(op, negociacao):
+            self._fechar(op, negociacao, "RECUSADO", [])
+            return detalhe_direta(negociacao, ator, op.agora)
+        return self._agir(ator, negociacao_id, correlacao, idempotencia, regra)
+
+    @staticmethod
+    def _na_vez(negociacao: dict, ator: Ator):
+        if ator.escopo != negociacao["vez"]:
+            raise ErroNegocio("FORA_DA_VEZ")
+
+    def _agir(self, ator, negociacao_id, correlacao, idempotencia, regra) -> dict:
+        """Ordem do §10 a partir do passo 6; a regra da rota valida, altera e devolve o corpo da resposta."""
+        with self.repo.transacao():
+            op = _Operacao(self.agora(), correlacao)
+            negociacao = self.repo.obter_negociacao(negociacao_id, bloquear=True)
+            if negociacao is None or not visivel(negociacao, ator):
+                raise ErroNegocio("NEGOCIACAO_NAO_ENCONTRADA")
+            if negociacao["modo"] != "VENDA_DIRETA":
+                raise ErroNegocio("MODO_INCOMPATIVEL")
+            # o bloqueio da negociação já serializa a mesma chave entre as réplicas
+            memorizada = self._replay(idempotencia, op.agora)
+            if memorizada is not None:
+                return memorizada
+            if not aceitando(negociacao, op.agora):
+                raise ErroNegocio("NEGOCIACAO_ENCERRADA")
+            if negociacao["compraImediata"]:
+                raise ErroNegocio("COMPRA_IMEDIATA")
+            corpo = regra(op, negociacao)
+            if idempotencia is not None:
+                self.repo.salvar_idempotencia(idempotencia.escopo, {
+                    "hashCorpo": idempotencia.hash_corpo, "status": idempotencia.status, "corpo": corpo,
+                    "location": None, "criadoEm": op.agora})
+            self._enviar(op)
+        return corpo
+
+    def _replay(self, idempotencia: Idempotencia | None, agora: datetime) -> dict | None:
+        registro = None if idempotencia is None else self.repo.obter_idempotencia(idempotencia.escopo)
+        if registro is None or registro["criadoEm"] + VALIDADE_IDEMPOTENCIA <= agora:
+            return None
+        if registro["hashCorpo"] != idempotencia.hash_corpo:
+            raise ErroNegocio("IDEMPOTENCIA_CONFLITO")
+        return registro["corpo"]
+
+    # ------------------------------------------------------------ prazos (RF-10, RN-21)
+
+    def executar_prazos(self) -> int:
+        agora = self.agora()
+        with self.repo.transacao():
+            vencidas = self.repo.listar_vencidas(agora, 100)
+        mudancas = 0
+        for negociacao_id in vencidas:
+            with self.repo.transacao():
+                negociacao = self.repo.obter_negociacao(negociacao_id, bloquear=True)
+                # shortcut: só a direta expira; o encerramento do leilão em dataFim (RN-10) entra com a abertura
+                # do leilão, e até lá um leilão vencido é deixado como está
+                if (negociacao is None or negociacao["modo"] != "VENDA_DIRETA" or negociacao["status"] != "ABERTO"
+                        or agora < negociacao["expiraEm"]):
+                    continue
+                op = _Operacao(agora, negociacao["correlationId"])
+                self._fechar(op, negociacao, "EXPIRADO", [])
+                self._enviar(op)
+                mudancas += 1
+        return mudancas

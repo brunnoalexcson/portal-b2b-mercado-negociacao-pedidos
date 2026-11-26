@@ -1,4 +1,4 @@
-"""Contratos de entrada e saída: eventos consumidos (§7.3) e eventos publicados (§7.4)."""
+"""Contratos de entrada e saída: corpos HTTP (§7.2), eventos consumidos (§7.3) e eventos publicados (§7.4)."""
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -27,7 +27,7 @@ def q2(valor):
 
 
 class EventoInvalido(ValueError):
-    """Mensagem consumida inválida (RN-20); `detalhe` vai para a `negociacao.dlt`."""
+    """Entrada fora do contrato: no consumo vai para a `negociacao.dlt` com o `detalhe` (RN-20); na API, 422."""
 
     def __init__(self, detalhe):
         super().__init__(detalhe)
@@ -94,6 +94,20 @@ def _instante(valor, campo):
         _invalido(campo)
     if lido.utcoffset() is None:
         _invalido(campo)
+
+
+def corpo_proposta(corpo):
+    """Corpo da API-09: só `precoUnitario`, valor monetário (§4)."""
+    if not isinstance(corpo, dict) or set(corpo) != {"precoUnitario"}:
+        _invalido("corpo")
+    return _numero(corpo, "precoUnitario", "corpo", MAX_VALOR)
+
+
+def corpo_vazio(corpo):
+    """Corpo da API-10 e da API-11: ausente (`None`) ou `{}`."""
+    if corpo not in (None, {}):
+        _invalido("corpo")
+    return {}
 
 
 def _modo_negociacao_definido(p):
