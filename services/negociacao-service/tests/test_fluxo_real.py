@@ -373,6 +373,8 @@ def test_contraproposta_idempotente_e_aceite_na_direta():
     )
     assert r_replay.status_code == 201
     assert loads(r_replay.text) == proposta_criada
+    # RN-18: o replay devolve os mesmos bytes, não só o mesmo conteúdo
+    assert r_replay.content == r_proposta.content
 
     with psycopg.connect(DSN) as conexao:
         total_propostas = conexao.execute(

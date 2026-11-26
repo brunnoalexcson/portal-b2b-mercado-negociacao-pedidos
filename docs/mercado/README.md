@@ -89,7 +89,7 @@ Segue o diagrama: o Mercado inicia os leilões e publica `modo_negociacao_defini
 
 | Grupo | Pendência |
 |---|---|
-| Negociação | Código consumindo `leilao_iniciado` e `modo_negociacao_definido` e teste com o Mercado (prazo: 30/11); na ESP-NEG-001, atualizar as referências |
+| Negociação | Teste integrado com o Mercado (prazo: 30/11). O código que consome `leilao_iniciado` e `modo_negociacao_definido` entrou na `main` em 26/11, e a ESP-NEG-001 v1.5 já cita a ESP-MRC-001 v0.11 |
 | Infra | Aguardando resposta da [issue #6](https://github.com/Printf-PedroCardoso/portal-b2b-kit-infra/issues/6), aberta em 26/11 (INT-MRC-03): Mercado × Infra: tópicos que o Mercado consome, consumidores no CONTRACTS.md e tabelas de exemplo do schema mercado |
 | Compra e Demanda | Implementar o combinado nas issues [#1](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/1) e [#2](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/2), respondidas em 26/11 (schemas, exemplos e `docs/03-eventos-e-integracoes.md`). O cancelamento das demandas de produto excluído depende do nome do tópico do Fornecimento |
 | Banco de Dados | Validar as tabelas do §6.1 e os tipos decimais (o DR-BD-002 não tem tabelas do Mercado); responder pelo Teams (INT-MRC-06) |

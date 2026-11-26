@@ -4,15 +4,15 @@ Responsável: Caio Almeida Oliveira. Porta `8106`, rotas `/api/v1/negociacoes`, 
 
 O serviço conduz as negociações que o Mercado define: leilões em que compradores disputam o lote de uma ou mais ofertas do mesmo produto, e negociações diretas de preço entre um comprador e um fornecedor. No fim, ele informa o resultado ao Pedidos, que efetiva ou cancela os pedidos temporários criados na abertura, e ao Mercado, que atualiza o saldo das demandas.
 
-## Situação em 25/11/2026
+## Situação em 26/11/2026
 
 | Item | Situação |
 |---|---|
-| Especificação (ESP-NEG-001 v1.5) | Rascunho alinhado com a ESP-MRC-001 v0.8 e a ESP-PED-001 v2.2; ainda não submetido ao gate G1 do QA |
+| Especificação (ESP-NEG-001 v1.5) | Rascunho alinhado com a ESP-MRC-001 v0.11 e a ESP-PED-001 v2.2; ainda não submetido ao gate G1 do QA |
 | Contratos de eventos | Schemas JSON e exemplos para os 7 tópicos, validados também contra os schemas do Mercado e do Pedidos |
-| Código (`services/negociacao-service/`) | Em andamento; G1 em paralelo |
+| Código (`services/negociacao-service/`) | Implementado em 26/11 (issue #14, partes 1 a 7): negociação direta com propostas, compra imediata e expiração; leilão com reservas, recálculo do lote, lances com sigilo e encerramento com rateio; idempotência HTTP e consumo idempotente com DLT. 186 testes automatizados e 6 de fluxo real na demonstração com duas réplicas, Redpanda e PostgreSQL. Falta rodar no kit, que depende do tópico `pedido_temporario_solicitado` |
 | Alinhamento com Mercado e Pedidos | Fechado em 19/11 (INT-NEG-01 a INT-NEG-03); INT-NEG-13 fechada com o Pedidos; IDs com até 64 caracteres no Mercado desde a v0.6 (INT-NEG-12, fechada em 22/11) |
-| Tópicos novos na Infra | `pedido_temporario_solicitado` e consumidores a pedir (INT-NEG-05) |
+| Tópicos novos na Infra | `pedido_temporario_solicitado` e os consumidores já pedidos nas issues [#3](https://github.com/Printf-PedroCardoso/portal-b2b-kit-infra/issues/3) (Pedidos) e [#6](https://github.com/Printf-PedroCardoso/portal-b2b-kit-infra/issues/6) (Mercado) do kit (INT-NEG-05) |
 
 ## Documentos
 
@@ -66,6 +66,6 @@ Não consome eventos do Fornecimento, da Demanda nem do Identity. A autenticaç�
 
 | Grupo | Pendência |
 |---|---|
-| Infra | Criar `pedido_temporario_solicitado`; registrar o Negociação como consumidor de `leilao_iniciado`, `modo_negociacao_definido` e `pedido_atualizado`, e o Mercado como consumidor de `negociacao_fechada` |
+| Infra | Atender as issues [#3](https://github.com/Printf-PedroCardoso/portal-b2b-kit-infra/issues/3) e [#6](https://github.com/Printf-PedroCardoso/portal-b2b-kit-infra/issues/6) do kit: criar `pedido_temporario_solicitado`, registrar o Negociação como consumidor de `pedido_atualizado` e o Mercado como consumidor de `negociacao_fechada` |
 | Banco de Dados | DDL do schema `negociacao` (tabelas na seção 6 da ESP), `NUMERIC(18,4)` para dinheiro e quantidade decimal |
 | QA | Revisar a ESP no gate G1 |
