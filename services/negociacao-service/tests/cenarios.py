@@ -41,6 +41,11 @@ DEM_Y = "36000000-0000-4000-8000-000000000002"
 
 L1 = "31000000-0000-4000-8000-000000000001"
 D1 = "31000000-0000-4000-8000-000000000002"
+L2 = "31000000-0000-4000-8000-000000000002"
+L3 = "31000000-0000-4000-8000-000000000003"
+L4 = "31000000-0000-4000-8000-000000000004"
+
+FORNECEDOR_DA_OFERTA = {OF_A: FORN_A, OF_B: FORN_B, OF_D: FORN_C, OF_E: FORN_C}
 
 CORR_L1 = "teste-neg-01"
 CORR_D1 = "teste-neg-02"
@@ -75,6 +80,45 @@ def schema(topico: str) -> dict:
 def evento_d1(**alteracoes_payload) -> dict:
     """Envelope de `modo_negociacao_definido` da direta D1 lido do exemplo oficial."""
     envelope = copy.deepcopy(exemplo("modo_negociacao_definido"))
+    envelope["payload"].update(alteracoes_payload)
+    return envelope
+
+
+def evento_l1(**alteracoes_payload) -> dict:
+    """Envelope de `leilao_iniciado` do leilão L1 lido do exemplo oficial."""
+    envelope = copy.deepcopy(exemplo("leilao_iniciado"))
+    envelope["payload"].update(alteracoes_payload)
+    return envelope
+
+
+def item_leilao(fornecimento_id: str, quantidade, preco_unitario, valor_item, participacao,
+                fornecedor_id: str | None = None) -> dict:
+    return {
+        "fornecimentoId": fornecimento_id,
+        "fornecedorId": fornecedor_id or FORNECEDOR_DA_OFERTA[fornecimento_id],
+        "quantidade": D(str(quantidade)),
+        "precoUnitario": D(str(preco_unitario)),
+        "valorItem": D(str(valor_item)),
+        "participacao": D(str(participacao)),
+        "origem": {"cidade": "Rio Verde", "uf": "GO"},
+    }
+
+
+def evento_leilao(n: int = 1, itens: list[dict] | None = None, preco_inicial=None, incremento_minimo=None,
+                  **alteracoes_payload) -> dict:
+    """Monta o `leilao_iniciado` de `Ln` conforme o §8.0."""
+    negociacao_id = f"31000000-0000-4000-8000-00000000000{n}"
+    envelope = evento_l1(negociacaoId=negociacao_id)
+    envelope["eventId"] = str(uuid4())
+    envelope["aggregateId"] = negociacao_id
+    if itens is not None:
+        envelope["payload"]["itens"] = itens
+        if itens and "quantidadeTotal" not in alteracoes_payload:
+            envelope["payload"]["quantidadeTotal"] = sum((D(str(i["quantidade"])) for i in itens), D("0.00"))
+    if preco_inicial is not None:
+        envelope["payload"]["precoInicial"] = D(str(preco_inicial))
+    if incremento_minimo is not None:
+        envelope["payload"]["incrementoMinimo"] = D(str(incremento_minimo))
     envelope["payload"].update(alteracoes_payload)
     return envelope
 
@@ -192,6 +236,24 @@ class Ambiente:
         self.entregar("modo_negociacao_definido", mensagem)
         return mensagem
 
+    def abrir_l1(self, **alteracoes_payload) -> dict:
+        mensagem = evento_l1(**alteracoes_payload)
+        self.entregar("leilao_iniciado", mensagem)
+        return mensagem
+
+    def abrir_leilao(self, n: int, itens: list[dict], preco_inicial, incremento_minimo,
+                     **alteracoes_payload) -> dict:
+        mensagem = evento_leilao(n, itens, preco_inicial, incremento_minimo, **alteracoes_payload)
+        self.entregar("leilao_iniciado", mensagem)
+        return mensagem
+
+    def abrir_l1_aberto(self) -> dict:
+        mensagem = self.abrir_l1()
+        self.em("12:01:00")
+        self.confirmar_reserva(OF_A, PT_A, L1, correlation_id=CORR_L1)
+        self.confirmar_reserva(OF_B, PT_B, L1, correlation_id=CORR_L1)
+        return mensagem
+
     def confirmar_reserva(self, fornecimento_id: str = OF_B, pedido_id: str = PT_D, negociacao_id: str = D1,
                           **opcoes) -> dict:
         opcoes.setdefault("timestamp", formato_json(self.relogio.now()))
@@ -206,6 +268,21 @@ class Ambiente:
         self.entregar("pedido_atualizado", mensagem)
         return mensagem
 
+    def inserir_l1(self, status: str = "ABERTO") -> dict:
+        agora = self.relogio.now()
+        leilao = {
+            "negociacaoId": L1, "modo": "LEILAO_DIRETO", "status": status, "produtoId": P,
+            "dataInicio": agora, "dataFim": t("15:00:00"), "quantidadeTotal": D("20.00"),
+            "precoInicial": D("2550.00"), "incrementoMinimo": D("25.50"), "incrementoMinimoPercentual": D("1.00"),
+            "melhorLanceId": None, "totalLances": 0, "compradorId": None, "fornecimentoId": None,
+            "fornecedorId": None, "quantidade": None, "precoOferta": None, "precoAtual": None, "vez": None,
+            "compraImediata": False, "expiraEm": None, "reservaSituacao": None, "pedidoId": None,
+            "totalPropostas": 0, "correlationId": CORR_L1, "criadoEm": agora, "encerradoEm": None,
+        }
+        with self.repo.transacao():
+            self.repo.inserir_negociacao(leilao)
+        return leilao
+
     def get(self, caminho: str, escopo: str | None = "BUYER", empresa: str | None = COMP_X, *,
             jwt_token: str | None = None, sem_auth: bool = False, headers: dict | None = None):
         cabecalhos = {}
@@ -215,6 +292,27 @@ class Ambiente:
         if headers:
             cabecalhos.update(headers)
         resposta = self.cliente.get(caminho, headers=cabecalhos)
+        if resposta.status_code >= 400:
+            validar_erro_rfc7807(resposta)
+            self.respostas_erro.append(resposta)
+        return resposta
+
+    def post(self, caminho: str, corpo_json=AUSENTE, escopo: str | None = "BUYER", empresa: str | None = COMP_X, *,
+             bruto: bytes | str | None = None, jwt_token: str | None = None, sem_auth: bool = False,
+             headers: dict | None = None, chave_idempotencia: str | None = None):
+        cabecalhos = {}
+        if not sem_auth:
+            valor_token = jwt_token if jwt_token is not None else self.token(escopo, empresa)
+            cabecalhos["Authorization"] = f"Bearer {valor_token}"
+        if chave_idempotencia is not None:
+            cabecalhos["Idempotency-Key"] = chave_idempotencia
+        if headers:
+            cabecalhos.update(headers)
+        conteudo = bruto
+        if conteudo is None and corpo_json is not AUSENTE:
+            conteudo = dumps(corpo_json)
+            cabecalhos.setdefault("Content-Type", "application/json")
+        resposta = self.cliente.post(caminho, content=conteudo, headers=cabecalhos)
         if resposta.status_code >= 400:
             validar_erro_rfc7807(resposta)
             self.respostas_erro.append(resposta)

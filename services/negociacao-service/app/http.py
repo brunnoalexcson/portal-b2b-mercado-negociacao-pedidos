@@ -7,10 +7,12 @@ from uuid import uuid4
 import jwt
 from fastapi import Request
 from prometheus_client import CollectorRegistry, Counter, Histogram, generate_latest
+from starlette.concurrency import run_in_threadpool
 from starlette.responses import Response
 
-from app.dominio import Ator, ErroNegocio
-from app.jsonio import dumps
+from app import contratos
+from app.dominio import Ator, ErroNegocio, Idempotencia
+from app.jsonio import dumps, fingerprint, loads
 from app.portas import RepositorioIndisponivel
 
 log = logging.getLogger(__name__)
@@ -22,13 +24,26 @@ ERROS = {
     "CONTEXTO_NAO_SELECIONADO": (403, "Acesso negado", "Selecione um contexto de empresa válido."),
     "ACESSO_NEGADO": (403, "Acesso negado", "Você não tem permissão para esta operação."),
     "NEGOCIACAO_NAO_ENCONTRADA": (404, "Não encontrado", "Negociação não encontrada."),
+    "NEGOCIACAO_ENCERRADA": (409, "Conflito", "A negociação não está aberta."),
+    "FORA_DA_VEZ": (409, "Conflito", "Aguarde a resposta da outra parte."),
+    "COMPRA_IMEDIATA": (409, "Conflito",
+                        "A compra pelo preço anunciado fecha sozinha quando o estoque é reservado."),
+    "RESERVA_PENDENTE": (409, "Conflito", "A reserva do estoque ainda não foi confirmada."),
     "MODO_INCOMPATIVEL": (409, "Conflito", "Operação não disponível para o modo desta negociação."),
+    "IDEMPOTENCIA_CONFLITO": (409, "Conflito", "A chave de idempotência já foi usada com outro corpo."),
     "VALIDACAO_INVALIDA": (422, "Entrada inválida", "Os dados da requisição são inválidos."),
+    "PROPOSTA_ACIMA_DA_OFERTA": (422, "Entrada inválida", "A proposta não pode ser maior que o preço da oferta."),
     "ERRO_INTERNO": (500, "Erro interno", "Não foi possível processar a requisição."),
     "DEPENDENCIA_INDISPONIVEL": (503, "Serviço indisponível", "Uma dependência necessária está indisponível."),
 }
 MODOS = ("LEILAO_DIRETO", "VENDA_DIRETA")
 STATUS = ("AGUARDANDO_RESERVAS", "ABERTO", "ENCERRADO", "DESERTO", "RECUSADO", "EXPIRADO")
+# só documentam no /docs o cabeçalho e o corpo das escritas; a validação continua em `escrever`
+CHAVE_OPENAPI = {"parameters": [{"name": "Idempotency-Key", "in": "header", "required": False,
+                                 "schema": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"}}]}
+PROPOSTA_OPENAPI = {**CHAVE_OPENAPI, "requestBody": {"required": True, "content": {"application/json": {"schema": {
+    "type": "object", "additionalProperties": False, "required": ["precoUnitario"],
+    "properties": {"precoUnitario": {"type": "number", "exclusiveMinimum": 0, "maximum": 999999999999.99}}}}}}}
 # o PyJWT só confere a assinatura: expiração, emissor e audiência são comparados aqui, com o relógio da porta
 OPCOES_JWT = {"verify_exp": False, "verify_nbf": False, "verify_iat": False, "verify_aud": False,
               "verify_iss": False}
@@ -123,6 +138,45 @@ def negociacao_id(valor):
     return valor.lower()
 
 
+def chave_idempotencia(request):
+    """§7.1: vazia equivale a ausente; mesmo formato do X-Correlation-Id."""
+    chave = request.headers.get("Idempotency-Key", "")
+    if chave and not CORRELACAO_HTTP.fullmatch(chave):
+        raise ErroNegocio("VALIDACAO_INVALIDA")
+    return chave or None
+
+
+def ler_corpo(bruto, validar):
+    """Devolve o JSON recebido (`None` sem corpo) e o valor validado."""
+    try:
+        dados = loads(bruto.decode("utf-8")) if bruto else None
+        return dados, validar(dados)
+    # EventoInvalido, JSON malformado e UTF-8 inválido são todos ValueError
+    except (ValueError, RecursionError) as exc:
+        raise ErroNegocio("VALIDACAO_INVALIDA") from exc
+
+
+async def escrever(request, negociacao_url, acao, validar, status):
+    """§10, passos 2 a 5; o serviço segue do passo 6. O corpo é lido à mão para não ser validado antes do token."""
+    bruto = await request.body()
+
+    def processar():
+        ator = autenticar(request)
+        identificador = negociacao_id(negociacao_url)
+        chave = chave_idempotencia(request)
+        dados, valor = ler_corpo(bruto, validar)
+        rota = request.url.path.rsplit("/", 1)[1]
+        idempotencia = None if chave is None else Idempotencia(
+            dumps([ator.empresa, ator.usuario, "POST", f"/api/v1/negociacoes/{identificador}/{rota}", chave]),
+            fingerprint(dados or {}), status)
+        servico = request.app.state.servico
+        return json_response(acao(servico, ator, identificador, valor, request.state.correlacao, idempotencia),
+                             status)
+
+    # banco e JWKS são síncronos: fora do laço de eventos
+    return await run_in_threadpool(processar)
+
+
 def configurar_http(app):
     # registro por aplicação: duas apps no mesmo processo não somam métricas
     registro = CollectorRegistry()
@@ -189,6 +243,24 @@ def configurar_http(app):
         identificador = negociacao_id(negociacaoId)
         pagina, tamanho = pagina_e_tamanho(request)
         return json_response(request.app.state.servico.propostas(ator, identificador, pagina, tamanho))
+
+    @app.post("/api/v1/negociacoes/{negociacaoId}/propostas", openapi_extra=PROPOSTA_OPENAPI)
+    async def propor(negociacaoId: str, request: Request):
+        def acao(servico, ator, identificador, preco, correlacao, idempotencia):
+            return servico.propor(ator, identificador, preco, correlacao, idempotencia)
+        return await escrever(request, negociacaoId, acao, contratos.corpo_proposta, 201)
+
+    @app.post("/api/v1/negociacoes/{negociacaoId}/aceitar", openapi_extra=CHAVE_OPENAPI)
+    async def aceitar(negociacaoId: str, request: Request):
+        def acao(servico, ator, identificador, _vazio, correlacao, idempotencia):
+            return servico.aceitar(ator, identificador, correlacao, idempotencia)
+        return await escrever(request, negociacaoId, acao, contratos.corpo_vazio, 200)
+
+    @app.post("/api/v1/negociacoes/{negociacaoId}/recusar", openapi_extra=CHAVE_OPENAPI)
+    async def recusar(negociacaoId: str, request: Request):
+        def acao(servico, ator, identificador, _vazio, correlacao, idempotencia):
+            return servico.recusar(ator, identificador, correlacao, idempotencia)
+        return await escrever(request, negociacaoId, acao, contratos.corpo_vazio, 200)
 
     async def negocio(request, exc):
         return problema(request, exc.codigo)

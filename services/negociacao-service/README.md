@@ -1,11 +1,11 @@
 # Negociação e Leilão do Portal B2B
 
-Implementação da [ESP-NEG-001](../../docs/negociacao/requisitos.md). Esta versão abre a negociação direta pelo `modo_negociacao_definido` do Mercado, pede a reserva ao Pedidos (`pedido_temporario_solicitado`) e registra a resposta (`pedido_atualizado`). A compra imediata fecha sozinha quando a reserva confirma, e a reserva recusada fecha a direta como `RECUSADO`. A API lista e detalha as negociações e lista as propostas (API-04, API-05 e API-08), com o token do Identity. Mensagens repetidas não repetem efeito, e as inválidas vão para a `negociacao.dlt`. Contraproposta, aceite, recusa, prazo de 48 h e o leilão entram nas próximas partes.
+Implementação da [ESP-NEG-001](../../docs/negociacao/requisitos.md). Esta versão abre a negociação direta pelo `modo_negociacao_definido` do Mercado, pede a reserva ao Pedidos (`pedido_temporario_solicitado`) e registra a resposta (`pedido_atualizado`). A compra imediata fecha sozinha quando a reserva confirma, e a reserva recusada fecha a direta como `RECUSADO`. Pela API, com o token do Identity, as partes consultam as negociações e as propostas (API-04, API-05 e API-08), fazem contraproposta, aceitam e recusam (API-09 a API-11); sem resposta em 48 h, a direta vai a `EXPIRADO`. As escritas aceitam `Idempotency-Key`. O leilão é aberto pelo `leilao_iniciado`, pede uma reserva por oferta e libera os lances quando todas respondem, recalculando o lote se alguma oferta foi recusada, ou fecha `DESERTO` se nenhuma confirmou. Mensagens repetidas não repetem efeito, e as inválidas vão para a `negociacao.dlt`. Os lances e o encerramento do leilão entram nas próximas partes.
 
 ## Estrutura
 
-- `app/dominio.py`: regras da negociação direta (ações permitidas, visibilidade, alocação) e o serviço `Negociacoes`, que as aplica sobre as portas de `app/portas.py`.
-- `app/contratos.py`: validação dos eventos consumidos e montagem dos publicados. `app/http.py`: rotas, JWT, RFC 7807, correlação e métricas.
+- `app/dominio.py`: regras da negociação direta (vez, prazo, teto da proposta, ações permitidas, visibilidade, alocação) e do leilão (recálculo do lote, participações, sigilo), idempotência das escritas e o serviço `Negociacoes`, que as aplica sobre as portas de `app/portas.py`.
+- `app/contratos.py`: validação dos corpos HTTP e dos eventos consumidos e montagem dos publicados. `app/http.py`: rotas, JWT, RFC 7807, correlação e métricas.
 - `app/main.py`: `create_app`, `executar_prazos` e `criar_app_real`.
 - `app/adaptadores/`: PostgreSQL (psycopg 3, pool ≤ 5), Kafka (outbox, publicador, consumidor, DLT) e JWKS.
 - `migracoes/versions/0001_negociacao.py`: schema `negociacao`, executado com a role `portal_ddl`.
@@ -66,21 +66,54 @@ Ele imprime os dois `negociacaoId` e um token de 2 h para o Comprador A, o Forne
 
 **5. Consultar a direta comum** (Comprador A): `GET /api/v1/negociacoes/{negociacaoId}` mostra `status` `ABERTO`, `vez` `BUYER`, `reservaSituacao` `PENDENTE` e `acoesPermitidas` `["PROPOR", "RECUSAR"]`. `GET /api/v1/negociacoes/{negociacaoId}/propostas` mostra a proposta 1 do fornecedor, pelo preço da oferta. Com o token do Comprador B, a mesma rota responde `404 NEGOCIACAO_NAO_ENCONTRADA`.
 
-**6. Confirmar a reserva da direta comum.** O script faz o papel do Pedidos: lê o `pedido_temporario_solicitado` da negociação e responde com `pedido_atualizado` `CONFIRMADA`.
+**6. Contraproposta do comprador** (Comprador A): `POST /api/v1/negociacoes/{negociacaoId}/propostas` com `{"precoUnitario": 125.00}` e `Idempotency-Key` `demo-1` responde 201 com a proposta 2. O detalhe passa a mostrar `precoAtual` 125.00, `vez` `SUPPLIER` e `expiraEm` renovado para 48 h depois. Para mostrar as regras:
+
+- antes dela, `{"precoUnitario": 130.01}` responde `422 PROPOSTA_ACIMA_DA_OFERTA`: nenhuma parte propõe acima do preço da oferta;
+- reenviar o mesmo corpo com `demo-1` devolve a mesma proposta, sem criar outra; com `{"precoUnitario": 124.00}` e `demo-1`, a resposta é `409 IDEMPOTENCIA_CONFLITO`;
+- sem chave, uma nova proposta do Comprador A responde `409 FORA_DA_VEZ`.
+
+**7. Aceite antes da reserva:** com o token do Fornecedor X (Authorize de novo), `POST /api/v1/negociacoes/{negociacaoId}/aceitar` responde `409 RESERVA_PENDENTE`.
+
+**8. Confirmar a reserva da direta comum.** O script faz o papel do Pedidos: lê o `pedido_temporario_solicitado` da negociação e responde com `pedido_atualizado` `CONFIRMADA`.
 
 ```bash
 docker compose -f compose.demo.yml run --rm --no-deps popular python demo/popular.py confirmar <negociacaoId>
 ```
 
-Consultando de novo, `reservaSituacao` fica `CONFIRMADA` e `acoesPermitidas` ganha `ACEITAR`.
+Consultando de novo, `reservaSituacao` fica `CONFIRMADA` e as `acoesPermitidas` do fornecedor ficam `["PROPOR", "ACEITAR", "RECUSAR"]`.
 
-**7. Confirmar a reserva da compra imediata** com o mesmo comando e o outro `negociacaoId`. A negociação fecha sozinha como `ENCERRADO`, com `acoesPermitidas` vazio, e o Console mostra o `negociacao_fechada` com a alocação de 10.00 × 130.00 = 1300.00. Para ver a recusa, abra outro cenário (passo 2) e use `recusar` no lugar de `confirmar`: a direta vai a `RECUSADO`.
+**9. Aceite do fornecedor** (Fornecedor X): `POST /api/v1/negociacoes/{negociacaoId}/aceitar`, sem corpo, responde 200 com `status` `ENCERRADO`, `encerradoEm` preenchido e `acoesPermitidas` vazio. Um segundo aceite responde `409 NEGOCIACAO_ENCERRADA`.
 
-**8. DLT:** mensagem que não segue o contrato vai para a `negociacao.dlt`, com o motivo em `detalhe`:
+**10. Evento no Console:** em **Topics** → `negociacao_fechada`, a mensagem com a chave da negociação traz `status` `ENCERRADO`, o `compradorId` e uma alocação com o `pedidoId` da reserva, 10.00 × 125.00 = 1250.00.
+
+**11. Compra imediata:** qualquer contraproposta, aceite ou recusa na outra negociação responde `409 COMPRA_IMEDIATA`. Confirme a reserva dela com o comando do passo 8 e o outro `negociacaoId`: ela fecha sozinha como `ENCERRADO` e o Console mostra o `negociacao_fechada` com 10.00 × 130.00 = 1300.00.
+
+**12. Recusa e prazo:** abra outro cenário (passo 2). `POST .../recusar` de qualquer participante, mesmo fora da vez, fecha a direta como `RECUSADO`, e o `negociacao_fechada` sai sem alocações; `recusar` no lugar de `confirmar` no passo 8 tem o mesmo efeito pela reserva. A direta sem resposta por 48 h vai a `EXPIRADO` pelo agendador, com o `correlationId` da abertura.
+
+**13. DLT:** mensagem que não segue o contrato vai para a `negociacao.dlt`, com o motivo em `detalhe`:
 
 ```bash
 echo '{"eventId": "E-62", "payload": {}}' | docker compose -f compose.demo.yml exec -T broker rpk topic produce modo_negociacao_definido -k demo
 ```
+
+**14. Abrir o leilão.** O script faz o papel do Mercado e publica um `leilao_iniciado` com 2 ofertas: A (5.00 × 120.00 = 600.00, participação 0.2353) e B (15.00 × 130.00 = 1950.00, participação 0.7647), preço inicial 2550.00 e incremento 25.50.
+
+```bash
+docker compose -f compose.demo.yml run --rm --no-deps popular python demo/popular.py leilao
+```
+
+Ele imprime o `negociacaoId`, os dois `fornecimentoId` e tokens do Comprador A, do Fornecedor A (dono da oferta A) e do Fornecedor X (fora do leilão). `GET /api/v1/negociacoes/{negociacaoId}` mostra `status` `AGUARDANDO_RESERVAS`, as duas ofertas `PENDENTE` e `acoesPermitidas` vazio. No Console, `pedido_temporario_solicitado` tem uma mensagem por oferta, com `tipo` `LEILAO`, na ordem das ofertas.
+
+**15. Confirmar uma oferta e recusar a outra**, como o Pedidos:
+
+```bash
+docker compose -f compose.demo.yml run --rm --no-deps popular python demo/popular.py confirmar <negociacaoId> <fornecimentoId da oferta A>
+docker compose -f compose.demo.yml run --rm --no-deps popular python demo/popular.py recusar <negociacaoId> <fornecimentoId da oferta B>
+```
+
+Depois da primeira, o leilão continua `AGUARDANDO_RESERVAS`. Depois da segunda, fica `ABERTO` com o lote recalculado sem a oferta B: `quantidadeTotal` 5.00, `precoInicial` 600.00, `incrementoMinimo` 6.00 (1% de 600.00) e a oferta A com participação 1.0000; a oferta B continua na lista como `RECUSADA`. O Comprador A vê `acoesPermitidas` `["DAR_LANCE"]`; o Fornecedor A e o Fornecedor X, `[]`.
+
+**16. Leilão deserto:** abra outro leilão (passo 14) e recuse as duas ofertas. O leilão fica `DESERTO`, com `encerradoEm`, e o Console mostra um `negociacao_fechada` com `status` `DESERTO` e `alocacoes` vazio.
 
 ## Conectar ao kit da turma
 

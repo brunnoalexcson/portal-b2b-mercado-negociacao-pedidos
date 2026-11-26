@@ -28,16 +28,15 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: NegociacaoReposit
     app.state.emissor = emissor
     app.state.audiencia = audiencia
     app.state.servico = Negociacoes(repositorio, event_bus, clock)
-    # shortcut: leilao_iniciado entra com a abertura do leilão
-    for topico in ("modo_negociacao_definido", "pedido_atualizado"):
+    for topico in ("leilao_iniciado", "modo_negociacao_definido", "pedido_atualizado"):
         event_bus.subscribe(topico, app.state.servico.handler(topico))
     configurar_http(app)
     return app
 
 
 def executar_prazos(app: FastAPI) -> int:
-    # DECISÃO: as regras de prazo do leilão e da direta ainda não existem; nenhuma negociação muda de estado.
-    return 0
+    """RN-21: processa os prazos vencidos em `clock.now()` e devolve quantas negociações mudaram de estado."""
+    return app.state.servico.executar_prazos()
 
 
 class RelogioSistema:

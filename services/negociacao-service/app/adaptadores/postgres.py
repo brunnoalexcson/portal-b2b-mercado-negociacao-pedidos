@@ -6,10 +6,10 @@ from uuid import UUID
 from psycopg import Error as ErroPostgres
 from psycopg import OperationalError
 from psycopg.rows import dict_row
-from psycopg.types.json import set_json_loads
+from psycopg.types.json import Jsonb, set_json_loads
 from psycopg_pool import ConnectionPool, PoolTimeout
 
-from app.jsonio import loads
+from app.jsonio import dumps, loads
 from app.portas import RepositorioIndisponivel
 
 
@@ -103,6 +103,36 @@ class Postgres:
         total = conn.execute(f"SELECT count(*) AS total {filtro}", parametros).fetchone()["total"]
         return [_campos(NEGOCIACAO, linha) for linha in linhas], total
 
+    def listar_vencidas(self, agora, limite):
+        linhas = self.conexao().execute("""
+            SELECT id FROM negociacao.processo_negociacao
+            WHERE (modo = 'LEILAO_DIRETO' AND status IN ('AGUARDANDO_RESERVAS', 'ABERTO') AND data_fim <= %(agora)s)
+               OR (modo = 'VENDA_DIRETA' AND status = 'ABERTO' AND expira_em <= %(agora)s)
+            ORDER BY coalesce(data_fim, expira_em), id
+            LIMIT %(limite)s
+        """, {"agora": agora, "limite": limite}).fetchall()
+        return [str(linha["id"]) for linha in linhas]
+
+    # ofertas do leilão
+
+    def inserir_oferta_leilao(self, oferta):
+        self._inserir("oferta_leilao", OFERTA_LEILAO, oferta)
+
+    def listar_ofertas_leilao(self, negociacao_id):
+        linhas = self.conexao().execute(
+            "SELECT * FROM negociacao.oferta_leilao WHERE negociacao_id = %s ORDER BY ordem", (negociacao_id,),
+        ).fetchall()
+        return [_campos(OFERTA_LEILAO, linha) for linha in linhas]
+
+    def atualizar_oferta_leilao(self, oferta):
+        chave = ("negociacaoId", "fornecimentoId")
+        campos = [campo for campo in OFERTA_LEILAO if campo not in chave]
+        self.conexao().execute(
+            f"UPDATE negociacao.oferta_leilao SET {', '.join(f'{OFERTA_LEILAO[c]} = %s' for c in campos)} "
+            "WHERE negociacao_id = %s AND fornecimento_id = %s",
+            [oferta[campo] for campo in campos] + [oferta[campo] for campo in chave],
+        )
+
     # propostas
 
     def inserir_proposta(self, proposta):
@@ -117,6 +147,24 @@ class Postgres:
         total = conn.execute("SELECT count(*) AS total FROM negociacao.proposta WHERE negociacao_id = %s",
                              (negociacao_id,)).fetchone()["total"]
         return [_campos(PROPOSTA, linha) for linha in linhas], total
+
+    # idempotência HTTP
+
+    def obter_idempotencia(self, escopo):
+        linha = self.conexao().execute(
+            "SELECT * FROM negociacao.idempotency_keys WHERE escopo = %s", (escopo,),
+        ).fetchone()
+        return None if linha is None else _campos(IDEMPOTENCIA, linha)
+
+    def salvar_idempotencia(self, escopo, registro):
+        self.conexao().execute(
+            "INSERT INTO negociacao.idempotency_keys (escopo, hash_corpo, status, corpo, location, criado_em) "
+            "VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (escopo) DO UPDATE SET hash_corpo = EXCLUDED.hash_corpo, "
+            "status = EXCLUDED.status, corpo = EXCLUDED.corpo, location = EXCLUDED.location, "
+            "criado_em = EXCLUDED.criado_em",
+            (escopo, registro["hashCorpo"], registro["status"], Jsonb(registro["corpo"], dumps=dumps),
+             registro["location"], registro["criadoEm"]),
+        )
 
     def _inserir(self, tabela, colunas, registro):
         self.conexao().execute(
@@ -139,6 +187,11 @@ NEGOCIACAO = _colunas("""
 """, {"negociacaoId": "id", "precoInicial": "valor_reserva"})
 PROPOSTA = _colunas("propostaId negociacaoId autor empresaId precoUnitario sequencia criadoEm",
                     {"propostaId": "id"})
+IDEMPOTENCIA = _colunas("hashCorpo status corpo location criadoEm", {})
+
+OFERTA_LEILAO = _colunas("""
+    negociacaoId fornecimentoId fornecedorId quantidade precoUnitario valorItem participacao ordem situacao pedidoId
+""", {})
 
 
 def _campos(colunas, linha):
