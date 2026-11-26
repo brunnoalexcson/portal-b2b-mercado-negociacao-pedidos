@@ -48,6 +48,9 @@ OFERTAS = {
 
 RAIZ = Path(__file__).resolve().parents[1]
 CONTRATOS = Path(os.environ.get("MERCADO_CONTRATOS_DIR", RAIZ.parents[1] / "docs" / "mercado" / "contratos"))
+if os.environ.get("MERCADO_CONTRATOS_DIR") and not (CONTRATOS / "modo_negociacao_definido.schema.json").exists():
+    # Na imagem (etapa test) os contratos são obrigatórios: sem eles a suíte falha em vez de pular os testes.
+    raise RuntimeError(f"MERCADO_CONTRATOS_DIR={CONTRATOS} não contém os contratos de docs/mercado/contratos")
 
 
 def t(hora: str) -> datetime:
