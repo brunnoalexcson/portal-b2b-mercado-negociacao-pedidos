@@ -274,13 +274,13 @@ def pedido_temporario_solicitado(negociacao):
     }
 
 
-def negociacao_fechada(negociacao, alocacoes):
+def negociacao_fechada(negociacao, alocacoes, demanda_id=None):
     encerrado = negociacao["status"] == "ENCERRADO"
     return {
         "negociacaoId": negociacao["negociacaoId"], "tipo": TIPO[negociacao["modo"]], "status": negociacao["status"],
         "compradorId": negociacao["compradorId"] if encerrado else None,
         # demandaId só existe no leilão encerrado (lance vencedor); a direta sempre manda null
-        "demandaId": None, "produtoId": negociacao["produtoId"], "alocacoes": alocacoes,
+        "demandaId": demanda_id if encerrado else None, "produtoId": negociacao["produtoId"], "alocacoes": alocacoes,
     }
 
 

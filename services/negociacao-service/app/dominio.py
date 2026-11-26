@@ -137,6 +137,17 @@ def recalcular_lote(negociacao: dict, lote: list[dict]) -> None:
                       incrementoMinimo=incremento_minimo(preco, negociacao["incrementoMinimoPercentual"]))
 
 
+def ratear(valor, preco_inicial, lote: list[dict]) -> list[dict]:
+    """RN-11: proporção exata do `valorItem`, centavos para baixo; a sobra vai à oferta de maior valor (empate: menor
+    `ordem`). O lote vem em ordem de `ordem`."""
+    totais = [(valor * o["valorItem"] / preco_inicial).quantize(Q2, rounding=ROUND_DOWN) for o in lote]
+    maior = max(range(len(lote)), key=lambda i: (lote[i]["valorItem"], -i))
+    totais[maior] += valor - sum(totais)
+    return [{"fornecimentoId": o["fornecimentoId"], "fornecedorId": o["fornecedorId"], "pedidoId": o["pedidoId"],
+             "quantidade": q2(o["quantidade"]), "valorUnitario": q2(total / o["quantidade"]), "valorTotal": q2(total)}
+            for o, total in zip(lote, totais)]
+
+
 def fornecedor_do_leilao(ofertas: list[dict], ator: Ator) -> bool:
     return any(o["fornecedorId"] == ator.empresa for o in ofertas)
 
@@ -263,10 +274,11 @@ class Negociacoes:
         chave = negociacao["negociacaoId"]
         op.eventos.append((topico, chave, contratos.envelope(topico, chave, payload, op.agora, op.correlacao)))
 
-    def _fechar(self, op: _Operacao, negociacao: dict, status: str, alocacoes: list):
+    def _fechar(self, op: _Operacao, negociacao: dict, status: str, alocacoes: list, demanda_id=None):
         negociacao.update(status=status, encerradoEm=op.agora)
         self.repo.atualizar_negociacao(negociacao)
-        self._publicar(op, "negociacao_fechada", negociacao, contratos.negociacao_fechada(negociacao, alocacoes))
+        self._publicar(op, "negociacao_fechada", negociacao,
+                       contratos.negociacao_fechada(negociacao, alocacoes, demanda_id))
 
     def _modo_negociacao_definido(self, op: _Operacao, p: dict) -> str:
         """RN-02 e RN-03."""
@@ -468,7 +480,7 @@ class Negociacoes:
             return lance(novo)
         return self._agir(ator, negociacao_id, correlacao, idempotencia, "LEILAO_DIRETO", regra)
 
-    # ------------------------------------------------------------ prazos (RF-10, RN-21)
+    # ------------------------------------------------------------ prazos (RF-06, RF-10, RN-21)
 
     def executar_prazos(self) -> int:
         agora = self.agora()
@@ -478,16 +490,33 @@ class Negociacoes:
         for negociacao_id in vencidas:
             with self.repo.transacao():
                 negociacao = self.repo.obter_negociacao(negociacao_id, bloquear=True)
-                # shortcut: só a direta expira; até o encerramento do leilão em dataFim (RN-10) existir, um leilão
-                # vencido é deixado como está e continua voltando em listar_vencidas
-                if (negociacao is None or negociacao["modo"] != "VENDA_DIRETA" or negociacao["status"] != "ABERTO"
-                        or agora < negociacao["expiraEm"]):
+                if negociacao is None:
                     continue
                 op = _Operacao(agora, negociacao["correlationId"])
-                self._fechar(op, negociacao, "EXPIRADO", [])
-                self._enviar(op)
-                mudancas += 1
+                if self._vencer(op, negociacao):
+                    self._enviar(op)
+                    mudancas += 1
         return mudancas
+
+    def _vencer(self, op: _Operacao, negociacao: dict) -> bool:
+        """RN-14 na direta e RN-10 no leilão, com a condição conferida de novo sob o bloqueio (RN-21)."""
+        if negociacao["modo"] == "VENDA_DIRETA":
+            if negociacao["status"] != "ABERTO" or op.agora < negociacao["expiraEm"]:
+                return False
+            self._fechar(op, negociacao, "EXPIRADO", [])
+            return True
+        if negociacao["status"] not in ("AGUARDANDO_RESERVAS", "ABERTO") or op.agora < negociacao["dataFim"]:
+            return False
+        # só há lance com o leilão ABERTO (RN-06): AGUARDANDO_RESERVAS chega aqui sem melhor lance
+        melhor = self._melhor_lance(negociacao)
+        if melhor is None:
+            self._fechar(op, negociacao, "DESERTO", [])
+            return True
+        lote = [o for o in self.repo.listar_ofertas_leilao(negociacao["negociacaoId"]) if o["situacao"] == "CONFIRMADA"]
+        negociacao["compradorId"] = melhor["compradorId"]
+        self._fechar(op, negociacao, "ENCERRADO", ratear(melhor["valor"], negociacao["precoInicial"], lote),
+                     melhor["demandaId"])
+        return True
 
     # ------------------------------------------------------------ leilão (RN-01, RN-03, RN-04, RN-05)
 
