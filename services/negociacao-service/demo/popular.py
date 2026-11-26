@@ -143,7 +143,10 @@ def abrir_leilao():
     asyncio.run(publicar(leilao(negociacao_id)))
     with httpx.Client(timeout=5) as cliente:
         tokens = {"Comprador A (BUYER)": token(cliente, COMPRADOR, "BUYER"),
+                  "Comprador B (BUYER)": token(cliente, OUTRO, "BUYER"),
                   "Fornecedor A (SUPPLIER, do leilão)": token(cliente, FORNECEDOR_A, "SUPPLIER"),
+                  # a mesma empresa com escopo de compra, para mostrar o conflito de interesse (RN-08)
+                  "Fornecedor A (BUYER, do leilão)": token(cliente, FORNECEDOR_A, "BUYER"),
                   "Fornecedor X (SUPPLIER, fora do leilão)": token(cliente, FORNECEDOR, "SUPPLIER")}
         cabecalho = {"Authorization": f"Bearer {tokens['Comprador A (BUYER)']}"}
         limite = time.monotonic() + 30

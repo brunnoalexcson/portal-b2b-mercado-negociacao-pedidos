@@ -23,7 +23,9 @@ ERROS = {
     "TOKEN_INVALIDO": (401, "Não autenticado", "Token de acesso ausente ou inválido."),
     "CONTEXTO_NAO_SELECIONADO": (403, "Acesso negado", "Selecione um contexto de empresa válido."),
     "ACESSO_NEGADO": (403, "Acesso negado", "Você não tem permissão para esta operação."),
+    "CONFLITO_DE_INTERESSE": (403, "Acesso negado", "A empresa não pode negociar com uma oferta própria."),
     "NEGOCIACAO_NAO_ENCONTRADA": (404, "Não encontrado", "Negociação não encontrada."),
+    "LEILAO_NAO_ABERTO": (409, "Conflito", "O leilão não está aceitando lances."),
     "NEGOCIACAO_ENCERRADA": (409, "Conflito", "A negociação não está aberta."),
     "FORA_DA_VEZ": (409, "Conflito", "Aguarde a resposta da outra parte."),
     "COMPRA_IMEDIATA": (409, "Conflito",
@@ -32,11 +34,15 @@ ERROS = {
     "MODO_INCOMPATIVEL": (409, "Conflito", "Operação não disponível para o modo desta negociação."),
     "IDEMPOTENCIA_CONFLITO": (409, "Conflito", "A chave de idempotência já foi usada com outro corpo."),
     "VALIDACAO_INVALIDA": (422, "Entrada inválida", "Os dados da requisição são inválidos."),
+    "LANCE_INSUFICIENTE": (422, "Entrada inválida",
+                           "O lance deve ser igual ou maior que o preço inicial e, havendo lances, igual ou maior que "
+                           "o melhor lance mais o incremento mínimo."),
     "PROPOSTA_ACIMA_DA_OFERTA": (422, "Entrada inválida", "A proposta não pode ser maior que o preço da oferta."),
     "ERRO_INTERNO": (500, "Erro interno", "Não foi possível processar a requisição."),
     "DEPENDENCIA_INDISPONIVEL": (503, "Serviço indisponível", "Uma dependência necessária está indisponível."),
 }
 MODOS = ("LEILAO_DIRETO", "VENDA_DIRETA")
+ESCOPOS = ("BUYER", "SUPPLIER")
 STATUS = ("AGUARDANDO_RESERVAS", "ABERTO", "ENCERRADO", "DESERTO", "RECUSADO", "EXPIRADO")
 # só documentam no /docs o cabeçalho e o corpo das escritas; a validação continua em `escrever`
 CHAVE_OPENAPI = {"parameters": [{"name": "Idempotency-Key", "in": "header", "required": False,
@@ -44,6 +50,10 @@ CHAVE_OPENAPI = {"parameters": [{"name": "Idempotency-Key", "in": "header", "req
 PROPOSTA_OPENAPI = {**CHAVE_OPENAPI, "requestBody": {"required": True, "content": {"application/json": {"schema": {
     "type": "object", "additionalProperties": False, "required": ["precoUnitario"],
     "properties": {"precoUnitario": {"type": "number", "exclusiveMinimum": 0, "maximum": 999999999999.99}}}}}}}
+LANCE_OPENAPI = {**CHAVE_OPENAPI, "requestBody": {"required": True, "content": {"application/json": {"schema": {
+    "type": "object", "additionalProperties": False, "required": ["valor"],
+    "properties": {"valor": {"type": "number", "exclusiveMinimum": 0, "maximum": 999999999999.99},
+                   "demandaId": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9._-]{1,64}$"}}}}}}}
 # o PyJWT só confere a assinatura: expiração, emissor e audiência são comparados aqui, com o relógio da porta
 OPCOES_JWT = {"verify_exp": False, "verify_nbf": False, "verify_iat": False, "verify_aud": False,
               "verify_iss": False}
@@ -73,8 +83,8 @@ def problema(request, codigo):
     }), status_code=status, media_type="application/problem+json", headers=cabecalhos)
 
 
-def autenticar(request) -> Ator:
-    """§7.1, passos 1 a 3. Todas as rotas desta versão aceitam BUYER e SUPPLIER."""
+def autenticar(request, escopos=ESCOPOS) -> Ator:
+    """§7.1, passos 1 a 3, com os escopos da rota (§7.2)."""
     estado = request.app.state
     esquema, _, token = request.headers.get("Authorization", "").partition(" ")
     if esquema.lower() != "bearer" or not token.strip():
@@ -106,7 +116,7 @@ def autenticar(request) -> Ator:
     empresa, escopo = claims.get("tenant_id"), claims.get("active_scope")
     if claims.get("view_mode") != "SINGLE" or not isinstance(empresa, str) or not empresa.strip() or escopo is None:
         raise ErroNegocio("CONTEXTO_NAO_SELECIONADO")
-    if escopo not in ("BUYER", "SUPPLIER"):
+    if escopo not in escopos:
         raise ErroNegocio("ACESSO_NEGADO")
     return Ator(sub, empresa, escopo)
 
@@ -156,12 +166,12 @@ def ler_corpo(bruto, validar):
         raise ErroNegocio("VALIDACAO_INVALIDA") from exc
 
 
-async def escrever(request, negociacao_url, acao, validar, status):
+async def escrever(request, negociacao_url, acao, validar, status, escopos=ESCOPOS):
     """§10, passos 2 a 5; o serviço segue do passo 6. O corpo é lido à mão para não ser validado antes do token."""
     bruto = await request.body()
 
     def processar():
-        ator = autenticar(request)
+        ator = autenticar(request, escopos)
         identificador = negociacao_id(negociacao_url)
         chave = chave_idempotencia(request)
         dados, valor = ler_corpo(bruto, validar)
@@ -236,6 +246,19 @@ def configurar_http(app):
     def detalhe(negociacaoId: str, request: Request):
         ator = autenticar(request)
         return json_response(request.app.state.servico.detalhe(ator, negociacao_id(negociacaoId)))
+
+    @app.get("/api/v1/negociacoes/{negociacaoId}/lances")
+    def lances(negociacaoId: str, request: Request):
+        ator = autenticar(request)
+        identificador = negociacao_id(negociacaoId)
+        pagina, tamanho = pagina_e_tamanho(request)
+        return json_response(request.app.state.servico.lances(ator, identificador, pagina, tamanho))
+
+    @app.post("/api/v1/negociacoes/{negociacaoId}/lances", openapi_extra=LANCE_OPENAPI)
+    async def dar_lance(negociacaoId: str, request: Request):
+        def acao(servico, ator, identificador, corpo, correlacao, idempotencia):
+            return servico.dar_lance(ator, identificador, corpo, correlacao, idempotencia)
+        return await escrever(request, negociacaoId, acao, contratos.corpo_lance, 201, ("BUYER",))
 
     @app.get("/api/v1/negociacoes/{negociacaoId}/propostas")
     def propostas(negociacaoId: str, request: Request):

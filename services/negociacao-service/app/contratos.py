@@ -18,6 +18,7 @@ PRODUTORES = {"leilao_iniciado": "mercado-service", "modo_negociacao_definido": 
               "pedido_atualizado": "pedidos-service"}
 TIPO = {"LEILAO_DIRETO": "LEILAO", "VENDA_DIRETA": "VENDA_DIRETA"}
 CORRELACAO = re.compile(r"[A-Za-z0-9._-]{1,128}")
+DEMANDA = re.compile(r"[A-Za-z0-9._-]{1,64}")
 UUID_TEXTO = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 # §4: valor monetário com até 12 dígitos inteiros, quantidade com até 10
 MAX_VALOR = Decimal("999999999999.99")
@@ -104,6 +105,16 @@ def corpo_proposta(corpo):
     if not isinstance(corpo, dict) or set(corpo) != {"precoUnitario"}:
         _invalido("corpo")
     return _numero(corpo, "precoUnitario", "corpo", MAX_VALOR)
+
+
+def corpo_lance(corpo):
+    """Corpo da API-07: `valor` (§4) e `demandaId` opcional, gravado sem conferência (RN-07); devolve os dois."""
+    if not isinstance(corpo, dict) or not set(corpo) <= {"valor", "demandaId"}:
+        _invalido("corpo")
+    demanda = corpo.get("demandaId")
+    if demanda is not None and (not isinstance(demanda, str) or not DEMANDA.fullmatch(demanda)):
+        _invalido("corpo.demandaId")
+    return _numero(corpo, "valor", "corpo", MAX_VALOR), demanda
 
 
 def corpo_vazio(corpo):

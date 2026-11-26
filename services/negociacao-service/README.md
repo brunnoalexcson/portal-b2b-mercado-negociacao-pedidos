@@ -1,10 +1,10 @@
 # Negociação e Leilão do Portal B2B
 
-Implementação da [ESP-NEG-001](../../docs/negociacao/requisitos.md). Esta versão abre a negociação direta pelo `modo_negociacao_definido` do Mercado, pede a reserva ao Pedidos (`pedido_temporario_solicitado`) e registra a resposta (`pedido_atualizado`). A compra imediata fecha sozinha quando a reserva confirma, e a reserva recusada fecha a direta como `RECUSADO`. Pela API, com o token do Identity, as partes consultam as negociações e as propostas (API-04, API-05 e API-08), fazem contraproposta, aceitam e recusam (API-09 a API-11); sem resposta em 48 h, a direta vai a `EXPIRADO`. As escritas aceitam `Idempotency-Key`. O leilão é aberto pelo `leilao_iniciado`, pede uma reserva por oferta e libera os lances quando todas respondem, recalculando o lote se alguma oferta foi recusada, ou fecha `DESERTO` se nenhuma confirmou. Mensagens repetidas não repetem efeito, e as inválidas vão para a `negociacao.dlt`. Os lances e o encerramento do leilão entram nas próximas partes.
+Implementação da [ESP-NEG-001](../../docs/negociacao/requisitos.md). Esta versão abre a negociação direta pelo `modo_negociacao_definido` do Mercado, pede a reserva ao Pedidos (`pedido_temporario_solicitado`) e registra a resposta (`pedido_atualizado`). A compra imediata fecha sozinha quando a reserva confirma, e a reserva recusada fecha a direta como `RECUSADO`. Pela API, com o token do Identity, as partes consultam as negociações e as propostas (API-04, API-05 e API-08), fazem contraproposta, aceitam e recusam (API-09 a API-11); sem resposta em 48 h, a direta vai a `EXPIRADO`. As escritas aceitam `Idempotency-Key`. O leilão é aberto pelo `leilao_iniciado`, pede uma reserva por oferta e libera os lances quando todas respondem, recalculando o lote se alguma oferta foi recusada, ou fecha `DESERTO` se nenhuma confirmou. Com o leilão aberto, os compradores dão lances pela API (API-07), cada um acima do melhor lance mais o incremento, e consultam os lances com o sigilo do comprador (API-06); cada lance aceito publica `lance_realizado`. Mensagens repetidas não repetem efeito, e as inválidas vão para a `negociacao.dlt`. O encerramento do leilão entra na próxima parte.
 
 ## Estrutura
 
-- `app/dominio.py`: regras da negociação direta (vez, prazo, teto da proposta, ações permitidas, visibilidade, alocação) e do leilão (recálculo do lote, participações, sigilo), idempotência das escritas e o serviço `Negociacoes`, que as aplica sobre as portas de `app/portas.py`.
+- `app/dominio.py`: regras da negociação direta (vez, prazo, teto da proposta, ações permitidas, visibilidade, alocação) e do leilão (recálculo do lote, participações, lance mínimo, conflito de interesse, sigilo), idempotência das escritas e o serviço `Negociacoes`, que as aplica sobre as portas de `app/portas.py`.
 - `app/contratos.py`: validação dos corpos HTTP e dos eventos consumidos e montagem dos publicados. `app/http.py`: rotas, JWT, RFC 7807, correlação e métricas.
 - `app/main.py`: `create_app`, `executar_prazos` e `criar_app_real`.
 - `app/adaptadores/`: PostgreSQL (psycopg 3, pool ≤ 5), Kafka (outbox, publicador, consumidor, DLT) e JWKS.
@@ -102,7 +102,7 @@ echo '{"eventId": "E-62", "payload": {}}' | docker compose -f compose.demo.yml e
 docker compose -f compose.demo.yml run --rm --no-deps popular python demo/popular.py leilao
 ```
 
-Ele imprime o `negociacaoId`, os dois `fornecimentoId` e tokens do Comprador A, do Fornecedor A (dono da oferta A) e do Fornecedor X (fora do leilão). `GET /api/v1/negociacoes/{negociacaoId}` mostra `status` `AGUARDANDO_RESERVAS`, as duas ofertas `PENDENTE` e `acoesPermitidas` vazio. No Console, `pedido_temporario_solicitado` tem uma mensagem por oferta, com `tipo` `LEILAO`, na ordem das ofertas.
+Ele imprime o `negociacaoId`, os dois `fornecimentoId` e tokens do Comprador A, do Comprador B, do Fornecedor A (dono da oferta A, com escopo `SUPPLIER` e também `BUYER`) e do Fornecedor X (fora do leilão). `GET /api/v1/negociacoes/{negociacaoId}` mostra `status` `AGUARDANDO_RESERVAS`, as duas ofertas `PENDENTE` e `acoesPermitidas` vazio. No Console, `pedido_temporario_solicitado` tem uma mensagem por oferta, com `tipo` `LEILAO`, na ordem das ofertas.
 
 **15. Confirmar uma oferta e recusar a outra**, como o Pedidos:
 
@@ -113,7 +113,16 @@ docker compose -f compose.demo.yml run --rm --no-deps popular python demo/popula
 
 Depois da primeira, o leilão continua `AGUARDANDO_RESERVAS`. Depois da segunda, fica `ABERTO` com o lote recalculado sem a oferta B: `quantidadeTotal` 5.00, `precoInicial` 600.00, `incrementoMinimo` 6.00 (1% de 600.00) e a oferta A com participação 1.0000; a oferta B continua na lista como `RECUSADA`. O Comprador A vê `acoesPermitidas` `["DAR_LANCE"]`; o Fornecedor A e o Fornecedor X, `[]`.
 
-**16. Leilão deserto:** abra outro leilão (passo 14) e recuse as duas ofertas. O leilão fica `DESERTO`, com `encerradoEm`, e o Console mostra um `negociacao_fechada` com `status` `DESERTO` e `alocacoes` vazio.
+**16. Lances** em `POST /api/v1/negociacoes/{negociacaoId}/lances`, com o lote do passo 15 (preço inicial 600.00, incremento 6.00). O lance é o valor total pelo lote:
+
+- Comprador A, `{"valor": 599.99}` → `422 LANCE_INSUFICIENTE`: o primeiro lance precisa chegar ao preço inicial;
+- Comprador A, `{"valor": 600.00, "demandaId": "demanda-a"}` com `Idempotency-Key` `lance-1` → 201 com `sequencia` 1 e o `compradorId` do Comprador A, sem o `demandaId`. Reenviar o mesmo corpo com `lance-1` devolve o mesmo lance, sem criar outro; com `{"valor": 700.00}` e `lance-1`, `409 IDEMPOTENCIA_CONFLITO`;
+- Comprador B, `{"valor": 605.99}` → `422 LANCE_INSUFICIENTE`: com lances, o mínimo é o melhor lance mais o incremento (606.00); `{"valor": 606.00}` → 201 com `sequencia` 2;
+- Fornecedor A com o token `BUYER`, `{"valor": 700.00}` → `403 CONFLITO_DE_INTERESSE`: quem fornece no leilão não dá lance nele, com a oferta em qualquer situação; com o token `SUPPLIER` de qualquer fornecedor, `403 ACESSO_NEGADO`.
+
+**17. Evento e sigilo:** no Console, **Topics** → `lance_realizado` tem uma mensagem por lance aceito, com a chave igual ao `negociacaoId` e o `compradorId` sem máscara. Em `GET /api/v1/negociacoes/{negociacaoId}/lances`, o Comprador A vê o próprio `compradorId` no lance 1 e `OCULTO` no lance 2; o Comprador B, o contrário; o Fornecedor A vê os dois. No detalhe (`GET /api/v1/negociacoes/{negociacaoId}`), `melhorLance` é o lance 2, com o mesmo sigilo, e `totalLances` é 2. Os valores nunca são ocultados.
+
+**18. Leilão deserto:** abra outro leilão (passo 14) e recuse as duas ofertas. O leilão fica `DESERTO`, com `encerradoEm`, e o Console mostra um `negociacao_fechada` com `status` `DESERTO` e `alocacoes` vazio.
 
 ## Conectar ao kit da turma
 

@@ -148,10 +148,25 @@ def sigilo(comprador_id, ofertas: list[dict], ator: Ator):
     return "OCULTO"
 
 
+def leilao_aberto(negociacao: dict, agora: datetime) -> bool:
+    """RN-06: `dataFim` vencido já recusa lances antes do encerramento mudar o status."""
+    return negociacao["status"] == "ABERTO" and agora < negociacao["dataFim"]
+
+
 def acoes_leilao(negociacao: dict, ofertas: list[dict], ator: Ator, agora: datetime) -> list[str]:
     """RN-17 no leilão."""
-    aceitando = negociacao["status"] == "ABERTO" and agora < negociacao["dataFim"]
-    return ["DAR_LANCE"] if aceitando and ator.escopo == "BUYER" and not fornecedor_do_leilao(ofertas, ator) else []
+    pode = leilao_aberto(negociacao, agora) and ator.escopo == "BUYER" and not fornecedor_do_leilao(ofertas, ator)
+    return ["DAR_LANCE"] if pode else []
+
+
+def lance(l: dict) -> dict:
+    """Projeção "Lance" sem máscara: resposta da API-07 e payload do `lance_realizado`."""
+    return {"lanceId": l["lanceId"], "negociacaoId": l["negociacaoId"], "compradorId": l["compradorId"],
+            "valor": q2(l["valor"]), "sequencia": l["sequencia"], "criadoEm": l["criadoEm"]}
+
+
+def lance_com_sigilo(l: dict, ofertas: list[dict], ator: Ator) -> dict:
+    return {**lance(l), "compradorId": sigilo(l["compradorId"], ofertas, ator)}
 
 
 def oferta_leilao(o: dict) -> dict:
@@ -160,13 +175,13 @@ def oferta_leilao(o: dict) -> dict:
             "participacao": o["participacao"].quantize(Q4, rounding=ROUND_HALF_UP), "situacao": o["situacao"]}
 
 
-def detalhe_leilao(negociacao: dict, ofertas: list[dict], ator: Ator, agora: datetime) -> dict:
+def detalhe_leilao(negociacao: dict, ofertas: list[dict], melhor: dict | None, ator: Ator, agora: datetime) -> dict:
     n = negociacao
     return {"negociacaoId": n["negociacaoId"], "modo": n["modo"], "status": n["status"], "produtoId": n["produtoId"],
             "dataInicio": n["dataInicio"], "dataFim": n["dataFim"], "quantidadeTotal": q2(n["quantidadeTotal"]),
             "precoInicial": q2(n["precoInicial"]), "incrementoMinimo": q2(n["incrementoMinimo"]),
-            # shortcut: sem lances ainda, melhorLance é sempre null; passa a vir de melhorLanceId com a API-07
-            "melhorLance": None, "totalLances": n["totalLances"],
+            "melhorLance": None if melhor is None else lance_com_sigilo(melhor, ofertas, ator),
+            "totalLances": n["totalLances"],
             "compradorId": sigilo(n["compradorId"], ofertas, ator), "ofertas": [oferta_leilao(o) for o in ofertas],
             "criadoEm": n["criadoEm"], "encerradoEm": n["encerradoEm"], "agora": agora,
             "acoesPermitidas": acoes_leilao(n, ofertas, ator, agora)}
@@ -319,8 +334,26 @@ class Negociacoes:
         with self.repo.transacao():
             negociacao = self._visivel(ator, negociacao_id)
             if negociacao["modo"] == "LEILAO_DIRETO":
-                return detalhe_leilao(negociacao, self.repo.listar_ofertas_leilao(negociacao_id), ator, self.agora())
+                return detalhe_leilao(negociacao, self.repo.listar_ofertas_leilao(negociacao_id),
+                                      self._melhor_lance(negociacao), ator, self.agora())
         return detalhe_direta(negociacao, ator, self.agora())
+
+    def lances(self, ator: Ator, negociacao_id: str, pagina: int, tamanho: int) -> dict:
+        with self.repo.transacao():
+            negociacao = self._visivel(ator, negociacao_id)
+            if negociacao["modo"] != "LEILAO_DIRETO":
+                raise ErroNegocio("MODO_INCOMPATIVEL")
+            itens, total = self.repo.listar_lances(negociacao_id, (pagina - 1) * tamanho, tamanho)
+            ofertas = self.repo.listar_ofertas_leilao(negociacao_id)
+        return {"items": [lance_com_sigilo(l, ofertas, ator) for l in itens], "page": pagina, "size": tamanho,
+                "total": total}
+
+    def _melhor_lance(self, negociacao: dict) -> dict | None:
+        """O lance de `melhorLanceId`: cada lance aceito supera o anterior (RN-07), então é sempre o último."""
+        if negociacao["melhorLanceId"] is None:
+            return None
+        [melhor], _ = self.repo.listar_lances(negociacao["negociacaoId"], negociacao["totalLances"] - 1, 1)
+        return melhor
 
     def propostas(self, ator: Ator, negociacao_id: str, pagina: int, tamanho: int) -> dict:
         with self.repo.transacao():
@@ -346,7 +379,7 @@ class Negociacoes:
                               expiraEm=op.agora + PRAZO_RESPOSTA, totalPropostas=nova["sequencia"])
             self.repo.atualizar_negociacao(negociacao)
             return proposta(nova)
-        return self._agir(ator, negociacao_id, correlacao, idempotencia, regra)
+        return self._agir_direta(ator, negociacao_id, correlacao, idempotencia, regra)
 
     def aceitar(self, ator: Ator, negociacao_id: str, correlacao: str,
                 idempotencia: Idempotencia | None = None) -> dict:
@@ -356,37 +389,42 @@ class Negociacoes:
                 raise ErroNegocio("RESERVA_PENDENTE")
             self._fechar(op, negociacao, "ENCERRADO", [alocacao(negociacao, negociacao["precoAtual"])])
             return detalhe_direta(negociacao, ator, op.agora)
-        return self._agir(ator, negociacao_id, correlacao, idempotencia, regra)
+        return self._agir_direta(ator, negociacao_id, correlacao, idempotencia, regra)
 
     def recusar(self, ator: Ator, negociacao_id: str, correlacao: str,
                 idempotencia: Idempotencia | None = None) -> dict:
         def regra(op, negociacao):
             self._fechar(op, negociacao, "RECUSADO", [])
             return detalhe_direta(negociacao, ator, op.agora)
-        return self._agir(ator, negociacao_id, correlacao, idempotencia, regra)
+        return self._agir_direta(ator, negociacao_id, correlacao, idempotencia, regra)
 
     @staticmethod
     def _na_vez(negociacao: dict, ator: Ator):
         if ator.escopo != negociacao["vez"]:
             raise ErroNegocio("FORA_DA_VEZ")
 
-    def _agir(self, ator, negociacao_id, correlacao, idempotencia, regra) -> dict:
+    def _agir_direta(self, ator, negociacao_id, correlacao, idempotencia, regra) -> dict:
+        def na_direta(op, negociacao):
+            if not aceitando(negociacao, op.agora):
+                raise ErroNegocio("NEGOCIACAO_ENCERRADA")
+            if negociacao["compraImediata"]:
+                raise ErroNegocio("COMPRA_IMEDIATA")
+            return regra(op, negociacao)
+        return self._agir(ator, negociacao_id, correlacao, idempotencia, "VENDA_DIRETA", na_direta)
+
+    def _agir(self, ator, negociacao_id, correlacao, idempotencia, modo, regra) -> dict:
         """Ordem do §10 a partir do passo 6; a regra da rota valida, altera e devolve o corpo da resposta."""
         with self.repo.transacao():
             op = _Operacao(self.agora(), correlacao)
             negociacao = self.repo.obter_negociacao(negociacao_id, bloquear=True)
             if negociacao is None or not visivel(negociacao, ator):
                 raise ErroNegocio("NEGOCIACAO_NAO_ENCONTRADA")
-            if negociacao["modo"] != "VENDA_DIRETA":
+            if negociacao["modo"] != modo:
                 raise ErroNegocio("MODO_INCOMPATIVEL")
             # o bloqueio da negociação já serializa a mesma chave entre as réplicas
             memorizada = self._replay(idempotencia, op.agora)
             if memorizada is not None:
                 return memorizada
-            if not aceitando(negociacao, op.agora):
-                raise ErroNegocio("NEGOCIACAO_ENCERRADA")
-            if negociacao["compraImediata"]:
-                raise ErroNegocio("COMPRA_IMEDIATA")
             corpo = regra(op, negociacao)
             if idempotencia is not None:
                 self.repo.salvar_idempotencia(idempotencia.escopo, {
@@ -402,6 +440,33 @@ class Negociacoes:
         if registro["hashCorpo"] != idempotencia.hash_corpo:
             raise ErroNegocio("IDEMPOTENCIA_CONFLITO")
         return registro["corpo"]
+
+    # ------------------------------------------------------------ lance (RF-05)
+
+    def dar_lance(self, ator: Ator, negociacao_id: str, corpo: tuple, correlacao: str,
+                  idempotencia: Idempotencia | None = None) -> dict:
+        """RN-08, RN-06 e RN-07, na ordem do §7.2, com o leilão bloqueado pelo `_agir`."""
+        valor, demanda_id = corpo
+
+        def regra(op, negociacao):
+            ofertas = self.repo.listar_ofertas_leilao(negociacao_id)
+            if fornecedor_do_leilao(ofertas, ator):
+                raise ErroNegocio("CONFLITO_DE_INTERESSE")
+            if not leilao_aberto(negociacao, op.agora):
+                raise ErroNegocio("LEILAO_NAO_ABERTO")
+            melhor = self._melhor_lance(negociacao)
+            minimo = negociacao["precoInicial"] if melhor is None else melhor["valor"] + negociacao["incrementoMinimo"]
+            if valor < minimo:
+                raise ErroNegocio("LANCE_INSUFICIENTE")
+            novo = {"lanceId": str(uuid4()), "negociacaoId": negociacao_id, "compradorId": ator.empresa,
+                    "usuarioId": ator.usuario, "valor": valor, "demandaId": demanda_id,
+                    "sequencia": negociacao["totalLances"] + 1, "criadoEm": op.agora}
+            self.repo.inserir_lance(novo)
+            negociacao.update(melhorLanceId=novo["lanceId"], totalLances=novo["sequencia"])
+            self.repo.atualizar_negociacao(negociacao)
+            self._publicar(op, "lance_realizado", negociacao, lance(novo))
+            return lance(novo)
+        return self._agir(ator, negociacao_id, correlacao, idempotencia, "LEILAO_DIRETO", regra)
 
     # ------------------------------------------------------------ prazos (RF-10, RN-21)
 

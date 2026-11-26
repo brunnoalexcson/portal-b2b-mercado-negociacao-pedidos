@@ -133,20 +133,29 @@ class Postgres:
             [oferta[campo] for campo in campos] + [oferta[campo] for campo in chave],
         )
 
-    # propostas
+    # lances e propostas
+
+    def inserir_lance(self, lance):
+        self._inserir("lance", LANCE, lance)
+
+    def listar_lances(self, negociacao_id, offset, limite):
+        return self._listar_por_sequencia("lance", LANCE, negociacao_id, offset, limite)
 
     def inserir_proposta(self, proposta):
         self._inserir("proposta", PROPOSTA, proposta)
 
     def listar_propostas(self, negociacao_id, offset, limite):
+        return self._listar_por_sequencia("proposta", PROPOSTA, negociacao_id, offset, limite)
+
+    def _listar_por_sequencia(self, tabela, colunas, negociacao_id, offset, limite):
         conn = self.conexao()
         linhas = conn.execute(
-            "SELECT * FROM negociacao.proposta WHERE negociacao_id = %s ORDER BY sequencia OFFSET %s LIMIT %s",
+            f"SELECT * FROM negociacao.{tabela} WHERE negociacao_id = %s ORDER BY sequencia OFFSET %s LIMIT %s",
             (negociacao_id, offset, limite),
         ).fetchall()
-        total = conn.execute("SELECT count(*) AS total FROM negociacao.proposta WHERE negociacao_id = %s",
+        total = conn.execute(f"SELECT count(*) AS total FROM negociacao.{tabela} WHERE negociacao_id = %s",
                              (negociacao_id,)).fetchone()["total"]
-        return [_campos(PROPOSTA, linha) for linha in linhas], total
+        return [_campos(colunas, linha) for linha in linhas], total
 
     # idempotência HTTP
 
@@ -185,6 +194,8 @@ NEGOCIACAO = _colunas("""
     precoOferta precoAtual vez compraImediata expiraEm reservaSituacao pedidoId totalPropostas correlationId
     criadoEm encerradoEm
 """, {"negociacaoId": "id", "precoInicial": "valor_reserva"})
+LANCE = _colunas("lanceId negociacaoId compradorId usuarioId valor demandaId sequencia criadoEm",
+                 {"lanceId": "id"})
 PROPOSTA = _colunas("propostaId negociacaoId autor empresaId precoUnitario sequencia criadoEm",
                     {"propostaId": "id"})
 IDEMPOTENCIA = _colunas("hashCorpo status corpo location criadoEm", {})
