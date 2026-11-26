@@ -6,7 +6,7 @@ Projeto da disciplina de Sistemas Distribuídos. Este repositório reúne os ser
 
 | Serviço | Responsabilidade | Situação |
 | --- | --- | --- |
-| [Mercado](docs/mercado/) | Calcular oferta × demanda por produto, mostrar a vitrine pelo menor preço, abrir a negociação direta e iniciar leilões em lote quando a demanda supera a oferta. | Especificação ESP-MRC-001 v0.7 no modelo ERS-LLM do QA, com contratos de eventos. Código previsto em `services/mercado-service/`. |
+| [Mercado](docs/mercado/) | Calcular oferta × demanda por produto, mostrar a vitrine pelo menor preço, abrir a negociação direta e iniciar leilões em lote quando a demanda supera a oferta. | Especificação ESP-MRC-001 v0.8 no modelo ERS-LLM do QA, com contratos de eventos. Código previsto em `services/mercado-service/`. |
 | [Negociação/Leilão](docs/negociacao/) | Conduzir os leilões que o Mercado inicia e as negociações diretas e publicar o resultado para Pedidos e Mercado. | Especificação ESP-NEG-001 v1.2 no modelo ERS-LLM do QA, com contratos de eventos. Código previsto em `services/negociacao-service/`. |
 | [Pedidos](docs/pedidos/) | Criar o pedido temporário que reserva o estoque na abertura da negociação, efetivar ou cancelar no fechamento e acompanhar destino, frete e entrega. | Especificação ESP-PED-001 v2.2 no modelo ERS-LLM do QA, com contratos de eventos. Código do primeiro fluxo (v1.1) em `services/pedidos-service/`, a adaptar à v2.2. |
 
@@ -61,7 +61,7 @@ O teste publica uma negociação fechada, verifica a reentrega sem duplicação 
 ## Documentação
 
 - [Mercado: visão geral, fronteiras e pendências](docs/mercado/README.md)
-- [Especificação de Mercado (ESP-MRC-001 v0.7, ERS-LLM)](docs/mercado/requisitos.md) e [contratos de eventos](docs/mercado/contratos/)
+- [Especificação de Mercado (ESP-MRC-001 v0.8, ERS-LLM)](docs/mercado/requisitos.md) e [contratos de eventos](docs/mercado/contratos/)
 - [Negociação e Leilão: visão geral, fronteiras e pendências](docs/negociacao/README.md)
 - [Especificação de Negociação e Leilão (ESP-NEG-001 v1.2, ERS-LLM)](docs/negociacao/requisitos.md) e [contratos de eventos](docs/negociacao/contratos/)
 - [Pedidos: visão geral, fronteiras e pendências](docs/pedidos/README.md)

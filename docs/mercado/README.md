@@ -4,11 +4,11 @@ Responsável: Brunno Alexcson. Porta `8105`, rotas `/api/v1/mercado`, schema Pos
 
 O serviço acompanha, por produto, a oferta disponível e a demanda aberta do portal e decide como cada compra é negociada: negociação direta entre um comprador e a oferta que ele escolher, ou leilão em lote quando a demanda supera a oferta e os fornecedores aceitam a sugestão de leilão. É o bloco 5 do diagrama da arquitetura ("calcula oferta vs demanda, define modo de negociação, inicia leilões quando necessário").
 
-## Situação em 25/11/2026 (v0.7)
+## Situação em 25/11/2026 (v0.8)
 
 | Item | Situação |
 |---|---|
-| Especificação (ESP-MRC-001 v0.7) | Rascunho no modelo ERS-LLM v1.2 do QA, antes do gate G1; 17 RFs, 59 CAs, decisões DG-01 a DG-57 |
+| Especificação (ESP-MRC-001 v0.8) | Rascunho no modelo ERS-LLM v1.2 do QA, antes do gate G1; 17 RFs, 59 CAs, decisões DG-01 a DG-58 |
 | Contratos de eventos | Schemas JSON e exemplos validados para os 12 tópicos; conferidos contra os contratos do Pedidos e do Fornecimento |
 | Código (`services/mercado-service/`) | Não iniciado; segue a estrutura do `pedidos-service` |
 | Alinhamento com Pedidos | Fechado em 19/11 (INT-MRC-02): a ESP-PED-001 não muda |
@@ -20,7 +20,7 @@ O serviço acompanha, por produto, a oferta disponível e a demanda aberta do po
 
 ## Documentos
 
-- [Especificação ESP-MRC-001](requisitos.md): regras, rotas, eventos, erros, critérios de aceitação e decisões DG-01 a DG-57, pendências de integração INT-MRC-01 a INT-MRC-09 e pontos fora desta versão (seção 13).
+- [Especificação ESP-MRC-001](requisitos.md): regras, rotas, eventos, erros, critérios de aceitação e decisões DG-01 a DG-58, pendências de integração INT-MRC-01 a INT-MRC-10 e pontos fora desta versão (seção 13).
 - [Contratos de eventos](contratos/): um `<topico>.schema.json` (JSON Schema 2020-12) e um `<topico>.exemplo.json` por tópico consumido e publicado.
 
 ## Como o serviço funciona
@@ -39,6 +39,7 @@ O serviço acompanha, por produto, a oferta disponível e a demanda aberta do po
 2. O Mercado confere aptidão, preço máximo, saldo da demanda e disponível da oferta, e publica `modo_negociacao_definido`.
 3. A Negociação abre a direta com o mesmo `negociacaoId` e pede o pedido temporário ao Pedidos (`pedido_temporario_solicitado`).
 4. Uma demanda pode ter várias negociações abertas com ofertas diferentes, até o seu saldo (atendimento parcial).
+5. Compra imediata: com `"compraImediata": true`, o comprador compra pelo preço da oferta, sem troca de propostas. A Negociação encerra a direta sozinha quando a reserva é confirmada.
 
 **Leilão (`LEILAO_DIRETO`)**
 
@@ -88,7 +89,7 @@ Segue o diagrama: o Mercado inicia os leilões e publica `modo_negociacao_defini
 
 | Grupo | Pendência |
 |---|---|
-| Negociação | Código consumindo `leilao_iniciado` e `modo_negociacao_definido` e teste com o Mercado (prazo: 30/11); na ESP-NEG-001, fechar a INT-NEG-12 (issue #7) e atualizar as referências |
+| Negociação | Código consumindo `leilao_iniciado` e `modo_negociacao_definido` e teste com o Mercado (prazo: 30/11); na ESP-NEG-001, fechar a INT-NEG-12 (issue #7) e atualizar as referências; compra imediata (INT-MRC-10) |
 | Infra | Criar `demanda_cancelada`, `produto_atualizado` e `fornecimento_atualizado`; registrar o Mercado como produtor e consumidor dos tópicos; retirar o Mercado dos consumidores de `lance_realizado`; retirar do `01-init.sql` as tabelas de exemplo do schema `mercado` (DG-56); rota do gateway |
 | Compra e Demanda | Aguardando resposta das duas issues abertas em 25/11 (INT-MRC-04):<br>[#1](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/1) Mercado × Compra e Demanda: confirmar os 3 eventos de demanda e alinhar preço máximo, UF, cidade e tamanho dos IDs<br>[#2](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/2) Mercado × Compra e Demanda: produto excluído, demanda recorrente, casas decimais e chave das mensagens |
 | Banco de Dados | Validar as tabelas do §6.1 e os tipos decimais (o DR-BD-002 não tem tabelas do Mercado); responder pelo Teams (INT-MRC-06) |

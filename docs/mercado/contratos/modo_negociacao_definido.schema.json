@@ -49,6 +49,7 @@
       "required": [
         "negociacaoId",
         "modo",
+        "compraImediata",
         "produtoId",
         "unidade",
         "quantidadeTotal",
@@ -68,6 +69,10 @@
             "VENDA_DIRETA",
             "LEILAO_DIRETO"
           ]
+        },
+        "compraImediata": {
+          "type": "boolean",
+          "description": "true: compra pelo preço da oferta, sem troca de propostas; a Negociação encerra a direta quando a reserva é confirmada (RN-35, DG-58). Sempre false no leilão."
         },
         "produtoId": {
           "type": "string",
@@ -274,6 +279,9 @@
             "properties": {
               "demandas": {
                 "maxItems": 0
+              },
+              "compraImediata": {
+                "const": false
               }
             }
           }
