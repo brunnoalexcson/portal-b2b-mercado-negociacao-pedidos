@@ -140,13 +140,15 @@ def participacoes(valores: list[Decimal]) -> list[Decimal]:
     return [q4(parte) for parte in partes]
 
 
-def montar_lote(aceites: list[dict], ofertas: dict[str, dict | None]) -> list[dict]:
+def montar_lote(aceites: list[dict], ofertas: dict[str, dict | None], produto_id: str | None = None) -> list[dict]:
     """RN-21: itens na ordem dos aceites, com `min(aceite, disponível)`; saem os que zeram, os de oferta não
     negociável, os de `valorItem` 0.00 e os que estourariam os limites do lote."""
     itens, soma_quantidade, soma_valor = [], ZERO, ZERO
     for aceite in aceites:
         oferta = ofertas.get(aceite["fornecimentoId"])
         if oferta is None or not negociavel(oferta):
+            continue
+        if produto_id is not None and oferta["produtoId"] != produto_id:
             continue
         quantidade = min(aceite["quantidade"], oferta["quantidadeDisponivel"])
         if quantidade <= 0:
@@ -191,6 +193,7 @@ class _Operacao:
     correlacao: str | None
     eventos: list = field(default_factory=list)
     bloqueados: set = field(default_factory=set)
+    ids_bloqueados: set = field(default_factory=set)
 
 
 class Mercado:
@@ -212,6 +215,12 @@ class Mercado:
         for produto in sorted(set(produtos) - op.bloqueados):
             self.repo.bloquear_produto(produto)
             op.bloqueados.add(produto)
+
+    def _bloquear_ids(self, op: _Operacao, *ids: str):
+        """IDs de demanda ou modelo (RN-08, RN-09), sempre antes dos produtos, em ordem fixa."""
+        for demanda_id in sorted(set(ids) - op.ids_bloqueados):
+            self.repo.bloquear_id_demanda(demanda_id)
+            op.ids_bloqueados.add(demanda_id)
 
     def _publicar(self, op: _Operacao):
         for topico, chave, mensagem in op.eventos:
@@ -288,7 +297,7 @@ class Mercado:
         correlacao = op.correlacao or sugestao["correlationId"] or str(uuid4())
         aceites = self._aceites_ordenados(sugestao["sugestaoId"])
         ofertas = {aceite["fornecimentoId"]: repo.obter_oferta(aceite["fornecimentoId"]) for aceite in aceites}
-        itens = montar_lote(aceites, ofertas)
+        itens = montar_lote(aceites, ofertas, produto_id)
         if not itens:
             sugestao.update(situacao=ENCERRADA, encerradaEm=op.agora)
             repo.salvar_sugestao(sugestao)
@@ -395,7 +404,8 @@ class Mercado:
         return resultado
 
     def _produto(self, op: _Operacao, p: dict) -> str:
-        """RN-02."""
+        """RN-02. O bloqueio do produto serializa cadastro e atualização entre as réplicas."""
+        self._bloquear(op, p["produtoId"])
         atual = self.repo.obter_produto(p["produtoId"])
         if atual is not None and p["instante"] <= atual["atualizadoEm"]:
             return "ignorado"
@@ -438,9 +448,24 @@ class Mercado:
         if not mudou:
             return "ignorado"
         repo.salvar_oferta(atual)
+        if anterior != atual["produtoId"]:
+            self._retirar_aceites_da_oferta(anterior, atual["fornecimentoId"])
         for produto in sorted({anterior, atual["produtoId"]}):
             self._recalcular(op, produto)
         return "aplicado"
+
+    def _retirar_aceites_da_oferta(self, produto_id: str, fornecimento_id: str):
+        """DG-67: oferta que muda de produto sai da sugestão em formação do produto anterior, como na API-13."""
+        repo = self.repo
+        sugestao = repo.obter_sugestao_ativa(produto_id)
+        if sugestao is None or sugestao["situacao"] != EM_FORMACAO:
+            return
+        if not any(aceite["fornecimentoId"] == fornecimento_id for aceite in repo.listar_aceites(sugestao["sugestaoId"])):
+            return
+        repo.remover_aceite(sugestao["sugestaoId"], fornecimento_id)
+        if not repo.listar_aceites(sugestao["sugestaoId"]):
+            sugestao.update(situacao=ABERTA, janelaEncerraEm=None, correlationId=None)
+            repo.salvar_sugestao(sugestao)
 
     def _estoque(self, op: _Operacao, p: dict) -> str:
         """RN-01, para `estoque_atualizado`."""
@@ -482,6 +507,7 @@ class Mercado:
 
     def _demanda_criada(self, op: _Operacao, p: dict) -> str:
         """RN-08."""
+        self._bloquear_ids(op, p["demandaId"])
         if self._id_em_uso(p["demandaId"]):
             return "ignorado"
         if p["tipo"] == "RECORRENTE":
@@ -494,6 +520,7 @@ class Mercado:
 
     def _demanda_recorrente(self, op: _Operacao, p: dict) -> str:
         """RN-08: ocorrência com `demandaId = ocorrenciaId` e `demandaOrigemId = demandaId` do evento."""
+        self._bloquear_ids(op, p["demandaId"], p["ocorrenciaId"])
         if self._id_em_uso(p["ocorrenciaId"]):
             return "ignorado"
         modelo = self.repo.obter_modelo(p["demandaId"])
@@ -520,8 +547,9 @@ class Mercado:
             self._recalcular(op, produto)
 
     def _demanda_cancelada(self, op: _Operacao, p: dict) -> str:
-        """RN-09."""
+        """RN-09. O bloqueio do ID serializa com a criação da demanda, do modelo e das ocorrências (RN-08)."""
         repo, demanda_id, comprador = self.repo, p["demandaId"], p["compradorId"]
+        self._bloquear_ids(op, demanda_id)
         demanda = repo.obter_demanda(demanda_id)
         if demanda is not None:
             if demanda["situacao"] != AGUARDANDO or demanda["compradorId"] != comprador:
@@ -834,9 +862,11 @@ class Mercado:
             valor = valor_item(quantidade, oferta["preco"])
             if valor <= 0 or valor > MAX_VALOR:
                 raise ErroMercado("VALIDACAO_INVALIDA")
+            produto = repo.obter_produto(produto_id)
             negociacao = {
                 "negociacaoId": str(uuid4()), "modo": VENDA_DIRETA, "produtoId": produto_id,
-                "unidade": oferta["unidade"], "situacao": ABERTA, "demandaId": demanda_id,
+                "unidade": produto["unidade"] if produto else oferta["unidade"], "situacao": ABERTA,
+                "demandaId": demanda_id,
                 "compradorId": demanda["compradorId"], "compraImediata": compra_imediata,
                 "itens": [{
                     "fornecimentoId": fornecimento_id, "fornecedorId": oferta["fornecedorId"],

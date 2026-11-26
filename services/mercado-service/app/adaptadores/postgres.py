@@ -214,6 +214,10 @@ class RepositorioPostgres:
         self._sql("INSERT INTO mercado.produto_lock (produto_id) VALUES (%s) ON CONFLICT DO NOTHING", (produto_id,))
         self._sql("SELECT produto_id FROM mercado.produto_lock WHERE produto_id=%s FOR UPDATE", (produto_id,))
 
+    def bloquear_id_demanda(self, demanda_id):
+        # Serializa criação e cancelamento do mesmo ID de demanda ou modelo entre as réplicas (RN-08, RN-09).
+        self._sql("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", ("mercado.demanda:" + demanda_id,))
+
     def obter_situacao_balanco(self, produto_id):
         linha = self._sql("SELECT situacao, situacao_desde FROM mercado.produto_lock WHERE produto_id=%s",
                           (produto_id,)).fetchone()

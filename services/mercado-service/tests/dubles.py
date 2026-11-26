@@ -148,6 +148,10 @@ class RepositorioMemoria:
         self._escrita("bloquear_produto")
         self.bloqueios.append(produto_id)
 
+    def bloquear_id_demanda(self, demanda_id):
+        self._escrita("bloquear_id_demanda")
+        self.bloqueios.append(f"demanda:{demanda_id}")
+
     def obter_situacao_balanco(self, produto_id):
         self._checar("obter_situacao_balanco")
         return _copia(self._dados["balanco"].get(produto_id))

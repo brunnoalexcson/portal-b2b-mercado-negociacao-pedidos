@@ -43,14 +43,21 @@ def test_demanda_valida_e_normalizada():
     assert evento.correlation_id == "teste-mrc-dem"
 
 
-def test_aceita_numero_inteiro_float_e_fuso_diferente_de_utc():
+def test_aceita_numero_inteiro_decimal_e_fuso_diferente_de_utc():
     mensagem = com(demanda_valida(), "payload.quantidade", 50)
-    mensagem = com(mensagem, "payload.precoMaximo", 9.5)
+    mensagem = com(mensagem, "payload.precoMaximo", D("9.5"))
     mensagem = com(mensagem, "payload.criadoEm", "2026-11-20T08:55:00-03:00")
     evento = validar_evento("demanda_criada", mensagem)
     assert evento.payload["quantidade"] == D("50.00")
     assert evento.payload["precoMaximo"] == D("9.50")
     assert evento.payload["instante"] == t("11:55")
+
+
+def test_recusa_float_mesmo_com_valor_valido():
+    # O leitor JSON do serviço entrega Decimal; float só chegaria por um caminho que já perdeu precisão (§4).
+    mensagem = com(demanda_valida(), "payload.precoMaximo", 99999999999999.99)
+    with pytest.raises(EventoInvalido):
+        validar_evento("demanda_criada", mensagem)
 
 
 @pytest.mark.parametrize("caminho,valor,detalhe", [

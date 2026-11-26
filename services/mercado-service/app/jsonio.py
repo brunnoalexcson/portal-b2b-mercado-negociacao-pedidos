@@ -57,6 +57,8 @@ def normalizar(objeto):
         return {chave: normalizar(valor) for chave, valor in objeto.items()}
     if isinstance(objeto, list):
         return [normalizar(valor) for valor in objeto]
+    if isinstance(objeto, int) and not isinstance(objeto, bool):
+        objeto = Decimal(objeto)
     if isinstance(objeto, Decimal):
         return objeto.normalize()
     return objeto

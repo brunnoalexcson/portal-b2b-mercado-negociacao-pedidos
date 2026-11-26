@@ -1,5 +1,4 @@
 """Contratos de entrada e saída: eventos consumidos (§7.3) e eventos publicados (§7.4)."""
-import math
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -149,14 +148,11 @@ def validar_instante(valor, campo) -> datetime:
 
 
 def validar_numero(valor, campo, *, positivo: bool, maximo: Decimal) -> Decimal:
-    """Número JSON (nunca texto nem booleano), com no máximo 2 casas e dentro do limite do §4."""
-    if isinstance(valor, bool) or not isinstance(valor, (int, float, Decimal)):
+    """Número JSON lido como Decimal (nunca texto, booleano nem float), com no máximo 2 casas e dentro do
+    limite do §4. `float` é recusado: a perda de precisão já teria acontecido antes de chegar aqui (§4)."""
+    if isinstance(valor, bool) or not isinstance(valor, (int, Decimal)):
         _invalido(campo)
-    if isinstance(valor, float):
-        if not math.isfinite(valor):
-            _invalido(campo)
-        valor = Decimal(repr(valor))
-    elif isinstance(valor, int):
+    if isinstance(valor, int):
         valor = Decimal(valor)
     if not valor.is_finite():
         _invalido(campo)
