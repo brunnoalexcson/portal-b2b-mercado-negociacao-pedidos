@@ -141,6 +141,19 @@ services:
     depends_on:
       - gateway
 
+  teste:
+    profiles: ["teste"]
+    build: *build-teste
+    environment:
+      NEGOCIACAO_DEMO: "1"
+      NEGOCIACAO_API_URL: http://gateway:8080
+      NEGOCIACAO_IDENTITY_URL: http://identity:8000
+      DATABASE_URL: postgresql://svc_negociacao:negociacao_demo_app@db:5432/portal_b2b
+      KAFKA_BOOTSTRAP_SERVERS: broker:9092
+    command: ["python", "-m", "pytest", "-q", "-s", "-p", "no:cacheprovider", "tests/test_fluxo_real.py"]
+    depends_on:
+      - gateway
+
 volumes:
   pgdata:
   rpdata:

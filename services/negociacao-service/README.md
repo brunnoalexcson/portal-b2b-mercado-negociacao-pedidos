@@ -18,6 +18,12 @@ Execute na pasta `services/negociacao-service`. A etapa `test` da imagem roda a 
 docker build --target test --build-context contratos=../../docs/negociacao/contratos -t negociacao-teste .
 ```
 
+O `tests/test_fluxo_real.py` só roda contra a demonstração (seção seguinte), com ela no ar:
+
+```bash
+docker compose -f compose.demo.yml run --build --rm --no-deps teste
+```
+
 ## Demonstração local
 
 Subir banco, Redpanda com os 7 tópicos, migração, emissor de tokens de teste, duas réplicas, gateway e Redpanda Console:
