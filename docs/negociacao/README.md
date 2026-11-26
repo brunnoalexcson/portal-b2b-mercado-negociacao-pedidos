@@ -8,7 +8,7 @@ O serviço conduz as negociações que o Mercado define: leilões em que comprad
 
 | Item | Situação |
 |---|---|
-| Especificação (ESP-NEG-001 v1.3) | Rascunho alinhado com a ESP-MRC-001 v0.7 e a ESP-PED-001 v2.2; ainda não submetido ao gate G1 do QA |
+| Especificação (ESP-NEG-001 v1.3) | Rascunho alinhado com a ESP-MRC-001 v0.8 e a ESP-PED-001 v2.2; ainda não submetido ao gate G1 do QA |
 | Contratos de eventos | Schemas JSON e exemplos para os 7 tópicos, validados também contra os schemas do Mercado e do Pedidos |
 | Código (`services/negociacao-service/`) | Em andamento; G1 em paralelo |
 | Alinhamento com Mercado e Pedidos | Fechado em 19/11 (INT-NEG-01 a INT-NEG-03); INT-NEG-13 fechada com o Pedidos; IDs com até 64 caracteres no Mercado desde a v0.6 (INT-NEG-12, fechada em 22/11) |
@@ -68,5 +68,4 @@ Não consome eventos do Fornecimento, da Demanda nem do Identity. A autenticaç�
 |---|---|
 | Infra | Criar `pedido_temporario_solicitado`; registrar o Negociação como consumidor de `leilao_iniciado`, `modo_negociacao_definido` e `pedido_atualizado`, e o Mercado como consumidor de `negociacao_fechada` |
 | Banco de Dados | DDL do schema `negociacao` (tabelas na seção 6 da ESP), `NUMERIC(18,4)` para dinheiro e quantidade decimal |
-| Mercado | Publicar o campo `compraImediata` no `POST /api/v1/mercado/negociacoes` e no `modo_negociacao_definido` (INT-NEG-14, combinado em 25/11) |
 | QA | Revisar a ESP no gate G1 |
