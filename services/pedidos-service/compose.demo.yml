@@ -25,6 +25,8 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./demo/init.sql:/docker-entrypoint-initdb.d/01-pedidos.sql:ro
+    ports:
+      - "127.0.0.1:${PEDIDOS_DB_PORT:-15433}:5432"
     healthcheck:
       test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "demo_admin", "-d", "portal_b2b"]
       interval: 2s
@@ -51,12 +53,22 @@ services:
       timeout: 3s
       retries: 30
 
+  console:
+    image: docker.redpanda.com/redpandadata/console:v2.7.2
+    environment:
+      KAFKA_BROKERS: broker:9092
+    ports:
+      - "127.0.0.1:${PEDIDOS_CONSOLE_PORT:-18091}:8080"
+    depends_on:
+      broker:
+        condition: service_healthy
+
   topicos:
     image: docker.redpanda.com/redpandadata/redpanda:v24.1.8
     entrypoint: ["sh", "-ec"]
     command:
       - |
-        for topic in produto_cadastrado produto_atualizado fornecimento_criado negociacao_fechada pedido_criado pedidos.dlt; do
+        for topic in pedido_temporario_solicitado negociacao_fechada produto_cadastrado produto_atualizado fornecimento_criado estoque_atualizado reserva_estoque_recusada solicitacao_frete_criada frete_selecionado entrega_concluida frete_indisponivel pedido_criado pedido_atualizado pedidos.dlt; do
           rpk topic describe "$$topic" -X brokers=broker:9092 >/dev/null 2>&1 ||
           rpk topic create "$$topic" -p 3 -r 1 -X brokers=broker:9092
         done
@@ -78,6 +90,8 @@ services:
       context: .
       target: test
     command: ["uvicorn", "tests.demo_identity:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:${PEDIDOS_IDENTITY_PORT:-18100}:8000"
 
   app1:
     <<: *app
@@ -99,6 +113,18 @@ services:
         condition: service_started
         restart: true
 
+  semear:
+    profiles: ["semear"]
+    build:
+      context: .
+      target: test
+    environment:
+      PEDIDOS_IDENTITY_URL: http://identity:8000
+      KAFKA_BOOTSTRAP_SERVERS: broker:9092
+    command: ["python", "-m", "tests.demo_eventos"]
+    depends_on:
+      - gateway
+
   teste:
     profiles: ["teste"]
     build:
@@ -106,6 +132,7 @@ services:
       target: test
     environment:
       PEDIDOS_DEMO: "1"
+      LOG_LEVEL: INFO
       PEDIDOS_API_URL: http://gateway:8080
       PEDIDOS_IDENTITY_URL: http://identity:8000
       DATABASE_URL: postgresql://svc_pedidos:pedidos_demo_app@db:5432/portal_b2b

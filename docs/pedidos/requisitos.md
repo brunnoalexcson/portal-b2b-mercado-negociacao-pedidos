@@ -10,7 +10,7 @@
 | Serviço / Bounded context | `pedidos-service` (Portal B2B Distribuído): Pedidos. Porta `8107`, rotas `/api/v1/pedidos`, schema PostgreSQL `pedidos`, role `svc_pedidos` |
 | Autores (PO / Dev / QA) | PO e Dev: Daniel Junio (grupo Mercado, Negociação/Leilão e Pedidos). QA: Grupo de Teste e Qualidade (revisão no gate G1) |
 | Data | 2026-11-23 |
-| Documentos relacionados | Diagrama "Arquitetura do Portal B2B Distribuído"; ESP-NEG-001 (branch `docs/esp-negociacao`, revisão `926dfb8`); ESP-MRC-001 v0.5 (`docs/mercado/requisitos.md`, revisão `5c8e8a2`); contratos de eventos em `docs/pedidos/contratos/`; kit de Infraestrutura (`CONTRACTS.md`, revisão `630515c`); contrato de eventos v2.0 do Fornecimento (revisão `56da541`); ESP-LOG-001 v1.4 da Logística (revisão `4758182`, resposta na issue ArrozbR/portal-b2b-logistica-transporte#1); ESP-FRN-001 e ESP-PRD-001 do Fornecimento e Produtos; Identity-Service (revisão `a763ed5`, `Docs/Alinhamento-Respostas-Equipes.md` §3.4, resposta na issue Matheus-Allvz/Identity-Service#27); DR-BD-002 v1.0; modelo ERS-LLM v1.2 do QA (revisão `efc05b6`). |
+| Documentos relacionados | Diagrama "Arquitetura do Portal B2B Distribuído"; ESP-NEG-001 v1.3 (`docs/negociacao/requisitos.md`, branch `main`); ESP-MRC-001 v0.5 (`docs/mercado/requisitos.md`, revisão `5c8e8a2`); contratos de eventos em `docs/pedidos/contratos/`; kit de Infraestrutura (`CONTRACTS.md`, revisão `630515c`); contrato de eventos v2.0 do Fornecimento (revisão `56da541`); ESP-LOG-001 v1.4 da Logística (revisão `4758182`, resposta na issue ArrozbR/portal-b2b-logistica-transporte#1); ESP-FRN-001 e ESP-PRD-001 do Fornecimento e Produtos; Identity-Service (revisão `a763ed5`, `Docs/Alinhamento-Respostas-Equipes.md` §3.4, resposta na issue Matheus-Allvz/Identity-Service#27); DR-BD-002 v1.0; modelo ERS-LLM v1.2 do QA (revisão `efc05b6`). |
 
 ## 1. Diretivas para a LLM geradora
 
@@ -1199,13 +1199,13 @@ Gerados de `docs/pedidos/contratos/*.exemplo.json` e válidos contra os schemas 
 `negociacao_fechada.deserto` (chave: `31000000-0000-4000-8000-000000000001`)
 
 ```json
-{"negociacaoId":"31000000-0000-4000-8000-000000000001","tipo":"LEILAO","status":"DESERTO","compradorId":null,"produtoId":"35000000-0000-4000-8000-000000000001","alocacoes":[]}
+{"negociacaoId":"31000000-0000-4000-8000-000000000001","tipo":"LEILAO","status":"DESERTO","compradorId":null,"produtoId":"35000000-0000-4000-8000-000000000001","demandaId":null,"alocacoes":[]}
 ```
 
 `negociacao_fechada` (chave: `31000000-0000-4000-8000-000000000001`)
 
 ```json
-{"negociacaoId":"31000000-0000-4000-8000-000000000001","tipo":"LEILAO","status":"ENCERRADO","compradorId":"b2000000-0000-4000-8000-000000000002","produtoId":"35000000-0000-4000-8000-000000000001","alocacoes":[{"fornecimentoId":"34000000-0000-4000-8000-000000000001","fornecedorId":"a1000000-0000-4000-8000-000000000001","pedidoId":"32000000-0000-4000-8000-000000000001","quantidade":5.0,"valorUnitario":130.0,"valorTotal":650.0},{"fornecimentoId":"34000000-0000-4000-8000-000000000002","fornecedorId":"a1000000-0000-4000-8000-000000000002","pedidoId":"32000000-0000-4000-8000-000000000002","quantidade":15.0,"valorUnitario":130.0,"valorTotal":1950.0}]}
+{"negociacaoId":"31000000-0000-4000-8000-000000000001","tipo":"LEILAO","status":"ENCERRADO","compradorId":"b2000000-0000-4000-8000-000000000002","produtoId":"35000000-0000-4000-8000-000000000001","demandaId":"d4000000-0000-4000-8000-000000000001","alocacoes":[{"fornecimentoId":"34000000-0000-4000-8000-000000000001","fornecedorId":"a1000000-0000-4000-8000-000000000001","pedidoId":"32000000-0000-4000-8000-000000000001","quantidade":5.0,"valorUnitario":130.0,"valorTotal":650.0},{"fornecimentoId":"34000000-0000-4000-8000-000000000002","fornecedorId":"a1000000-0000-4000-8000-000000000002","pedidoId":"32000000-0000-4000-8000-000000000002","quantidade":15.0,"valorUnitario":130.0,"valorTotal":1950.0}]}
 ```
 
 `pedido_atualizado.aguardando_frete` (chave: `32000000-0000-4000-8000-000000000001`)

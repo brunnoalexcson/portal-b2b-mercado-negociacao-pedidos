@@ -8,6 +8,7 @@ x-pedidos: &pedidos
     JWKS_URL: ${JWKS_URL:?Informe a URL interna de JWKS}
     JWT_ISSUER: ${JWT_ISSUER:-identity-service}
     JWT_AUDIENCE: ${JWT_AUDIENCE:-b2b-platform}
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
   networks: [portal-net]
 
 services:

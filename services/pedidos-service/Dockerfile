@@ -18,4 +18,4 @@ COPY alembic.ini .
 COPY migracoes migracoes
 USER 65532:65532
 EXPOSE 8107
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8107"]
+CMD ["uvicorn", "app.main:criar_app_real", "--factory", "--host", "0.0.0.0", "--port", "8107"]

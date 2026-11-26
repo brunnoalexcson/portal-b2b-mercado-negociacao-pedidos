@@ -1,28 +1,136 @@
 # Pedidos do Portal B2B
 
-O primeiro fluxo recebe `negociacao_fechada` pelo Kafka, combina o resultado com as projeções de produto e fornecimento e grava o pedido em `CRIADO`. A mesma transação registra histórico, auditoria e `pedido_criado` na outbox. A API consulta o pedido, e o `POST` de recuperação usa a mesma unicidade por negociação.
+Implementação da [ESP-PED-001 v2.2](../../docs/pedidos/requisitos.md). Para cada oferta de uma negociação aberta, o serviço cria um pedido temporário, sem comprador, e acompanha a reserva no Fornecimento. No fechamento, conclui a venda dos pedidos alocados e cancela os demais. Depois, o comprador informa o destino, e os eventos da Logística levam o pedido até `ENTREGUE`.
 
-A [especificação](../../docs/pedidos/requisitos.md) descreve os marcos seguintes, incluindo confirmação de estoque, frete, conclusão comercial e entrega.
+| Item | Onde |
+|---|---|
+| Portas (`EventBus`, `Clock`, `PedidosRepositorio`, `ChavesPublicas`) | `app/portas.py` |
+| `create_app`, `reconciliar` e `criar_app_real` | `app/main.py` |
+| Regras de cada tópico e da API-07 | `app/servico.py` e `app/dominio.py` |
+| Validação de eventos e montagem das saídas | `app/contratos.py` |
+| Rotas, JWT e erros RFC 7807 | `app/http.py` |
+| Postgres, Kafka (outbox, consumidor e DLT) e JWKS | `app/adaptadores/` |
+| Migração do schema `pedidos` | `migracoes/versions/0001_pedidos.py` |
 
-A [validação de 12/11/2026](validacao/relatorio.md) registra os testes executados, as correções e a cobertura dos 23 critérios. O primeiro fluxo está implementado; estoque, frete e conclusão ainda são os próximos marcos.
+## Testes de aceitação
 
-## Rodar a demonstração
-
-Execute na pasta `services/pedidos-service`, com o Docker Desktop iniciado.
+A suíte roda em memória, com dublês das portas, e cobre os 39 critérios de aceitação da ESP.
 
 ```powershell
-docker compose -f compose.demo.yml up -d --build gateway
-docker compose -f compose.demo.yml run --build --rm --no-deps teste python -m pytest -q -s
+python -m pip install -r requirements.txt -r requirements-test.txt
+python -m pytest -q
 ```
 
-O Compose sobe PostgreSQL 16, Redpanda, duas réplicas de Pedidos e o gateway Nginx. O teste publica exemplos dos eventos dos parceiros, valida JWT RS256 emitido por um serviço de teste interno e consulta a API pelo gateway. Os dados e as credenciais são exclusivos da demonstração.
+## Apresentação em um comando
 
-- Prontidão em [localhost:18107/health/ready](http://localhost:18107/health/ready).
-- Documentação HTTP em [localhost:18107/docs](http://localhost:18107/docs).
-- O teste imprime o UUID do pedido e o ID da mensagem publicada. Ele também verifica a contagem no banco, o histórico, a visibilidade por empresa, a negociação deserta e o envio de mensagem inválida para `pedidos.dlt`.
+Com o Docker Desktop aberto, no `cmd` ou no PowerShell, rode na pasta do serviço:
 
-Para pausar o ambiente preservando os dados, execute `docker compose -f compose.demo.yml stop`.
+```powershell
+.\apresentar
+```
+
+O roteiro sobe a stack e percorre o ciclo do pedido em 9 etapas, com uma pausa em cada uma:
+
+1. ambiente;
+2. projeções;
+3. pedido temporário;
+4. reserva;
+5. fechamento;
+6. destino;
+7. frete;
+8. entrega;
+9. segurança e DLT.
+
+Ele publica no Kafka os eventos de teste dos parceiros (PROF-05) e mostra pela API o efeito de cada um. Opções:
+
+- `-SemPausa`: roda direto;
+- `-Reiniciar`: apaga os dados antes de começar.
+
+Se o Docker Desktop fechar ao abrir com "An unexpected error occurred", rode `.\consertar-docker`. Esse erro costuma aparecer depois de reiniciar o Windows e vem de um socket antigo que o Docker não consegue apagar sozinho. O script move as pastas desse socket e abre o Docker de novo.
+
+## Simulador com menu
+
+Para escolher caso a caso o que acontece, rode na pasta do serviço:
+
+```powershell
+.\simular
+```
+
+Cada opção do menu publica o evento que o parceiro publicaria e mostra na hora os pedidos e a auditoria. As opções são:
+
+- abrir leilão ou venda direta;
+- confirmar ou recusar a reserva;
+- encerrar com vencedor;
+- leilão deserto;
+- fechamento incompatível;
+- destino;
+- frete, troca de transportadora e frete indisponível;
+- entrega;
+- histórico;
+- quem vê o quê;
+- evento inválido e DLT;
+- derrubar e religar a réplica `app1`, para mostrar que a `app2` segue sozinha.
+
+Para ensaiar sem digitar, passe a sequência de respostas com `-Passos`, por exemplo `.\simular -Passos "1,3,T,5"`. Use `-` para aceitar o valor padrão.
+
+## Consultar e simular erros pelo Swagger
+
+1. Pegue um token pronto em [localhost:18100/tokens](http://localhost:18100/tokens). Há tokens para:
+   - comprador;
+   - fornecedor F1;
+   - outro comprador;
+   - transportadora;
+   - login sem contexto;
+   - suporte;
+   - token expirado.
+2. Abra [localhost:18107/docs](http://localhost:18107/docs), clique em **Authorize**, cole o token e confirme.
+3. Em cada rota, use **Try it out** e depois **Execute**. Para trocar de perfil, volte em **Authorize**, clique em **Logout** e cole outro token.
+
+## Rodar no Docker
+
+Execute na pasta do serviço, com o Docker Desktop iniciado.
+
+```powershell
+docker compose -f compose.demo.yml up -d --build gateway console
+```
+
+O Compose sobe:
+
+- PostgreSQL 16;
+- Redpanda, com os 14 tópicos;
+- a migração;
+- um emissor de JWT de teste;
+- duas réplicas de Pedidos;
+- o gateway Nginx em [localhost:18107](http://localhost:18107/docs);
+- o Redpanda Console em [localhost:18091](http://localhost:18091), para ver as mensagens de cada tópico;
+- o PostgreSQL em `localhost:15433` (banco `portal_b2b`, usuário `demo_admin`, senha `pedidos_demo_admin`), para abrir no DBeaver ou no pgAdmin.
+
+Os dados e as credenciais valem só para a demonstração.
+
+Para semear uma negociação com os eventos de teste dos parceiros (PROF-05), rode o comando abaixo. Ele leva P1 e P2 a `VENDA_CONCLUIDA` e P3 a `CANCELADO`, e imprime os IDs e um token de comprador.
+
+```powershell
+docker compose -f compose.demo.yml run --build --rm semear
+```
+
+Para testar o fluxo inteiro (temporário, reserva, fechamento, destino, frete, entrega e DLT) pelo gateway:
+
+```powershell
+docker compose -f compose.demo.yml run --build --rm teste
+```
+
+Rotas da API:
+
+- `GET /api/v1/pedidos`;
+- `GET /api/v1/pedidos/{id}`;
+- `GET /api/v1/pedidos/{id}/historico`;
+- `PUT /api/v1/pedidos/{id}/destino`;
+- `/health`, `/health/ready` e `/metrics`.
+
+Para parar o ambiente, use `docker compose -f compose.demo.yml stop`. Para apagar os dados, use `down -v`.
 
 ## Conectar ao kit da turma
 
-O [override do Compose](compose.pedidos.yml) aponta `app1-pedidos` e `app2-pedidos` para este projeto. Use as variáveis de [.env.example](.env.example), o schema `pedidos`, a role de aplicação `svc_pedidos` e a role de migração fornecida pela Infra. Os comandos estão na seção 3 da especificação. O marco demonstrado usa os contratos de trabalho de Pedidos. A homologação com os produtores e consumidores reais depende dos acordos da seção 13.
+O [override do Compose](compose.pedidos.yml) aponta `app1-pedidos` e `app2-pedidos` para este projeto. Use as variáveis de [.env.example](.env.example), o schema `pedidos`, a role de aplicação `svc_pedidos` e a role de migração fornecida pela Infra.
+
+A migração começa com `DROP TABLE IF EXISTS` das tabelas de exemplo que o `database/01-init.sql` do kit cria no schema `pedidos`.

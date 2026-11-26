@@ -10,7 +10,7 @@ O serviço registra o pedido que bloqueia o estoque de uma oferta durante a nego
 |---|---|
 | Especificação (ESP-PED-001 v2.2) | No modelo **ERS-LLM v1.2 do QA**, como a ESP-MRC-001: 10 RFs, 39 critérios de aceitação em Gherkin, 29 regras, 11 RNFs. Conteúdo aprovado em 19/11 (v2.0, processo AED, 5 rodadas de revisão independente). Pronta para o gate G1. |
 | Contratos de eventos | Schemas JSON 2020-12 e exemplos validados para os 14 tópicos consumidos e publicados. Compatíveis com os contratos da Negociação (`926dfb8`), do Mercado (`5c8e8a2`) e do Fornecimento (`56da541`). |
-| Código (`services/pedidos-service/`) | Primeiro fluxo (v1.1) implementado e testado. Falta adaptar ao pedido temporário da v2.2. |
+| Código (`services/pedidos-service/`) | v2.2 implementada em 25/11: portas e `create_app`, 11 tópicos consumidos, API-01 a API-07, outbox, DLT e migração com `DROP` das tabelas de exemplo do kit. Suíte em memória com os 39 CAs e fluxo completo validado na stack Docker de demonstração. |
 | Alinhamento com Negociação e Mercado | Fluxo combinado em 19/11 (ver abaixo), registrado na ESP-MRC-001 v0.5. |
 
 ## Documentos
