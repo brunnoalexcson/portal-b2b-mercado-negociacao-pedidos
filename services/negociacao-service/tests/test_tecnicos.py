@@ -34,6 +34,9 @@ class Dependencia:
             raise self.estado
         return self.estado
 
+    def subscribe(self, topic, handler):
+        """Os handlers não são usados nestes testes."""
+
 
 def cliente(repositorio=True, barramento=True, agora=DOZE):
     app = create_app(Dependencia(barramento), Relogio(agora), Dependencia(repositorio), chaves_publicas=None)

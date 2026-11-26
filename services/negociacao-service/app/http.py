@@ -4,20 +4,34 @@ import time
 from datetime import timezone
 from uuid import uuid4
 
+import jwt
 from fastapi import Request
 from prometheus_client import CollectorRegistry, Counter, Histogram, generate_latest
 from starlette.responses import Response
 
+from app.dominio import Ator, ErroNegocio
 from app.jsonio import dumps
 from app.portas import RepositorioIndisponivel
 
 log = logging.getLogger(__name__)
 SERVICO = "negociacao-service"
 CORRELACAO_HTTP = re.compile(r"[A-Za-z0-9._-]{1,128}")
+UUID_URL = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 ERROS = {
+    "TOKEN_INVALIDO": (401, "Não autenticado", "Token de acesso ausente ou inválido."),
+    "CONTEXTO_NAO_SELECIONADO": (403, "Acesso negado", "Selecione um contexto de empresa válido."),
+    "ACESSO_NEGADO": (403, "Acesso negado", "Você não tem permissão para esta operação."),
+    "NEGOCIACAO_NAO_ENCONTRADA": (404, "Não encontrado", "Negociação não encontrada."),
+    "MODO_INCOMPATIVEL": (409, "Conflito", "Operação não disponível para o modo desta negociação."),
+    "VALIDACAO_INVALIDA": (422, "Entrada inválida", "Os dados da requisição são inválidos."),
     "ERRO_INTERNO": (500, "Erro interno", "Não foi possível processar a requisição."),
     "DEPENDENCIA_INDISPONIVEL": (503, "Serviço indisponível", "Uma dependência necessária está indisponível."),
 }
+MODOS = ("LEILAO_DIRETO", "VENDA_DIRETA")
+STATUS = ("AGUARDANDO_RESERVAS", "ABERTO", "ENCERRADO", "DESERTO", "RECUSADO", "EXPIRADO")
+# o PyJWT só confere a assinatura: expiração, emissor e audiência são comparados aqui, com o relógio da porta
+OPCOES_JWT = {"verify_exp": False, "verify_nbf": False, "verify_iat": False, "verify_aud": False,
+              "verify_iss": False}
 
 
 def agora(app):
@@ -34,11 +48,79 @@ def problema(request, codigo):
     status, titulo, detalhe = ERROS[codigo]
     correlacao = getattr(request.state, "correlacao", None) or str(uuid4())
     # o cabeçalho vai aqui porque o handler de Exception responde por fora do middleware
+    cabecalhos = {"X-Correlation-Id": correlacao}
+    if status == 401:
+        cabecalhos["WWW-Authenticate"] = "Bearer"
     return Response(dumps({
         "type": "about:blank", "title": titulo, "status": status, "codigo": codigo,
         "detail": detalhe, "instance": request.url.path, "correlationId": correlacao,
         "timestamp": agora(request.app),
-    }), status_code=status, media_type="application/problem+json", headers={"X-Correlation-Id": correlacao})
+    }), status_code=status, media_type="application/problem+json", headers=cabecalhos)
+
+
+def autenticar(request) -> Ator:
+    """§7.1, passos 1 a 3. Todas as rotas desta versão aceitam BUYER e SUPPLIER."""
+    estado = request.app.state
+    esquema, _, token = request.headers.get("Authorization", "").partition(" ")
+    if esquema.lower() != "bearer" or not token.strip():
+        raise ErroNegocio("TOKEN_INVALIDO")
+    try:
+        cabeca = jwt.get_unverified_header(token)
+    except jwt.InvalidTokenError as exc:
+        raise ErroNegocio("TOKEN_INVALIDO") from exc
+    kid = cabeca.get("kid")
+    if cabeca.get("alg") != "RS256" or not isinstance(kid, str) or not kid:
+        raise ErroNegocio("TOKEN_INVALIDO")
+    try:
+        chave = estado.chaves_publicas.obter(kid)
+    except Exception as exc:
+        raise ErroNegocio("DEPENDENCIA_INDISPONIVEL") from exc
+    if chave is None:
+        raise ErroNegocio("TOKEN_INVALIDO")
+    try:
+        claims = jwt.decode(token, chave, algorithms=["RS256"], options=OPCOES_JWT)
+    except (jwt.InvalidTokenError, ValueError, TypeError) as exc:
+        raise ErroNegocio("TOKEN_INVALIDO") from exc
+    audiencia, sub, expira = claims.get("aud"), claims.get("sub"), claims.get("exp")
+    if (claims.get("iss") != estado.emissor
+            or not (audiencia == estado.audiencia or (isinstance(audiencia, list) and estado.audiencia in audiencia))
+            or not isinstance(sub, str) or not sub.strip()
+            or not isinstance(expira, int) or isinstance(expira, bool)
+            or expira <= int(agora(request.app).timestamp())):
+        raise ErroNegocio("TOKEN_INVALIDO")
+    empresa, escopo = claims.get("tenant_id"), claims.get("active_scope")
+    if claims.get("view_mode") != "SINGLE" or not isinstance(empresa, str) or not empresa.strip() or escopo is None:
+        raise ErroNegocio("CONTEXTO_NAO_SELECIONADO")
+    if escopo not in ("BUYER", "SUPPLIER"):
+        raise ErroNegocio("ACESSO_NEGADO")
+    return Ator(sub, empresa, escopo)
+
+
+def pagina_e_tamanho(request):
+    """§7.2: `page` inteiro ≥ 1 (padrão 1) e `size` de 1 a 100 (padrão 10)."""
+    lidos = []
+    for nome, padrao, maximo in (("page", 1, 2_147_483_647), ("size", 10, 100)):
+        valor = request.query_params.get(nome)
+        if valor is None:
+            lidos.append(padrao)
+        elif valor.isascii() and valor.isdigit() and 1 <= int(valor) <= maximo:
+            lidos.append(int(valor))
+        else:
+            raise ErroNegocio("VALIDACAO_INVALIDA")
+    return lidos
+
+
+def filtro(request, nome, valores):
+    valor = request.query_params.get(nome)
+    if valor is not None and valor not in valores:
+        raise ErroNegocio("VALIDACAO_INVALIDA")
+    return valor
+
+
+def negociacao_id(valor):
+    if not UUID_URL.fullmatch(valor):
+        raise ErroNegocio("VALIDACAO_INVALIDA")
+    return valor.lower()
 
 
 def configurar_http(app):
@@ -88,11 +170,35 @@ def configurar_http(app):
         return Response(generate_latest(registro),
                         headers={"Content-Type": "text/plain; version=0.0.4; charset=utf-8"})
 
+    # rotas síncronas: o FastAPI as roda fora do laço de eventos, junto com o banco e o JWKS
+    @app.get("/api/v1/negociacoes")
+    def listar(request: Request):
+        ator = autenticar(request)
+        pagina, tamanho = pagina_e_tamanho(request)
+        modo, status = filtro(request, "modo", MODOS), filtro(request, "status", STATUS)
+        return json_response(request.app.state.servico.listar(ator, modo, status, pagina, tamanho))
+
+    @app.get("/api/v1/negociacoes/{negociacaoId}")
+    def detalhe(negociacaoId: str, request: Request):
+        ator = autenticar(request)
+        return json_response(request.app.state.servico.detalhe(ator, negociacao_id(negociacaoId)))
+
+    @app.get("/api/v1/negociacoes/{negociacaoId}/propostas")
+    def propostas(negociacaoId: str, request: Request):
+        ator = autenticar(request)
+        identificador = negociacao_id(negociacaoId)
+        pagina, tamanho = pagina_e_tamanho(request)
+        return json_response(request.app.state.servico.propostas(ator, identificador, pagina, tamanho))
+
+    async def negocio(request, exc):
+        return problema(request, exc.codigo)
+
     async def dependencia(request, _exc):
         return problema(request, "DEPENDENCIA_INDISPONIVEL")
 
     async def interno(request, _exc):
         return problema(request, "ERRO_INTERNO")
 
+    app.add_exception_handler(ErroNegocio, negocio)
     app.add_exception_handler(RepositorioIndisponivel, dependencia)
     app.add_exception_handler(Exception, interno)

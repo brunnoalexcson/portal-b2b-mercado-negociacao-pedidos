@@ -1,11 +1,25 @@
 name: negociacao-demo
 
+x-build-teste: &build-teste
+  context: .
+  target: test
+  additional_contexts:
+    contratos: ../../docs/negociacao/contratos
+
 x-app: &app
-  build: .
+  build:
+    context: .
+    target: runtime
+  # Mesma aplicação de criar_app_real; demo/app_demo.py só declara o Bearer no OpenAPI (botão Authorize do /docs).
+  command: ["uvicorn", "demo.app_demo:criar", "--factory", "--host", "0.0.0.0", "--port", "8106"]
+  volumes:
+    - ./demo:/srv/negociacao/demo:ro
   environment:
     DATABASE_URL: postgresql://svc_negociacao:negociacao_demo_app@db:5432/portal_b2b
     KAFKA_BOOTSTRAP_SERVERS: broker:9092
     KAFKA_GROUP_ID: negociacao-service-v1
+    JWKS_URL: http://identity:8000/.well-known/jwks.json
+    LOG_LEVEL: INFO
   healthcheck:
     test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8106/health/ready', timeout=2)"]
     interval: 2s
@@ -16,6 +30,8 @@ x-app: &app
       condition: service_completed_successfully
     topicos:
       condition: service_completed_successfully
+    identity:
+      condition: service_started
 
 services:
   db:
@@ -67,13 +83,19 @@ services:
         condition: service_healthy
 
   migrar:
-    build: .
+    build:
+      context: .
+      target: runtime
     command: ["python", "-m", "alembic", "upgrade", "head"]
     environment:
       MIGRATION_DATABASE_URL: postgresql://portal_ddl:negociacao_demo_ddl@db:5432/portal_b2b
     depends_on:
       db:
         condition: service_healthy
+
+  identity:
+    build: *build-teste
+    command: ["uvicorn", "tests.demo_identity:app", "--host", "0.0.0.0", "--port", "8000"]
 
   app1:
     <<: *app
@@ -94,6 +116,30 @@ services:
       app2:
         condition: service_healthy
         restart: true
+
+  console:
+    image: docker.redpanda.com/redpandadata/console:v2.7.2
+    environment:
+      KAFKA_BROKERS: broker:9092
+    ports:
+      - "127.0.0.1:${NEGOCIACAO_CONSOLE_PORT:-18086}:8080"
+    depends_on:
+      broker:
+        condition: service_healthy
+
+  popular:
+    profiles: ["demo"]
+    build: *build-teste
+    environment:
+      NEGOCIACAO_API_URL: http://gateway:8080
+      NEGOCIACAO_IDENTITY_URL: http://identity:8000
+      KAFKA_BOOTSTRAP_SERVERS: broker:9092
+      PYTHONPATH: /srv/negociacao
+    volumes:
+      - ./demo:/srv/negociacao/demo:ro
+    command: ["python", "demo/popular.py"]
+    depends_on:
+      - gateway
 
 volumes:
   pgdata:

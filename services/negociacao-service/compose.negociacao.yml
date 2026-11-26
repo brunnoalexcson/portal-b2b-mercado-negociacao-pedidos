@@ -1,15 +1,23 @@
+# Override do Compose do kit:
+#   docker compose -f docker-compose.yml -f <projeto>/services/negociacao-service/compose.negociacao.yml up -d
+x-negociacao-build: &negociacao-build
+  context: ${NEGOCIACAO_PROJECT_DIR:?Indique o caminho absoluto de services/negociacao-service}
+  target: runtime
+
 x-negociacao: &negociacao
-  build:
-    context: ${NEGOCIACAO_PROJECT_DIR:?Indique o caminho absoluto de negociacao}
+  build: *negociacao-build
   environment:
-    DATABASE_URL: ${DATABASE_URL:?Informe a DSN de svc_negociacao}
+    DATABASE_URL: ${NEGOCIACAO_DATABASE_URL:?Informe a DSN de svc_negociacao}
     KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-rp-0:9092,rp-1:9092,rp-2:9092}
     KAFKA_GROUP_ID: ${KAFKA_GROUP_ID:-negociacao-service-v1}
-    JWKS_URL: ${JWKS_URL:?Informe a URL interna de JWKS}
+    JWKS_URL: ${JWKS_URL:-http://gateway:8080/.well-known/jwks.json}
     JWT_ISSUER: ${JWT_ISSUER:-identity-service}
     JWT_AUDIENCE: ${JWT_AUDIENCE:-b2b-platform}
     APP_PORT: ${APP_PORT:-8106}
     LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  depends_on:
+    negociacao-migrate:
+      condition: service_completed_successfully
   networks: [portal-net]
 
 services:
@@ -18,9 +26,10 @@ services:
   app2-negociacao:
     <<: *negociacao
   negociacao-migrate:
-    build:
-      context: ${NEGOCIACAO_PROJECT_DIR:?Indique o caminho absoluto de negociacao}
+    build: *negociacao-build
     command: ["python", "-m", "alembic", "upgrade", "head"]
     environment:
-      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?Informe a DSN da role portal_ddl}
+      MIGRATION_DATABASE_URL: ${NEGOCIACAO_MIGRATION_DATABASE_URL:?Informe a DSN de portal_ddl}
+    depends_on:
+      - pg-primary
     networks: [portal-net]
