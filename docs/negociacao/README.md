@@ -4,14 +4,14 @@ Responsável: Caio Almeida Oliveira. Porta `8106`, rotas `/api/v1/negociacoes`, 
 
 O serviço conduz as negociações que o Mercado define: leilões em que compradores disputam o lote de uma ou mais ofertas do mesmo produto, e negociações diretas de preço entre um comprador e um fornecedor. No fim, ele informa o resultado ao Pedidos, que efetiva ou cancela os pedidos temporários criados na abertura, e ao Mercado, que atualiza o saldo das demandas.
 
-## Situação em 19/11/2026
+## Situação em 25/11/2026
 
 | Item | Situação |
 |---|---|
-| Especificação (ESP-NEG-001 v1.2) | Rascunho alinhado com a ESP-MRC-001 v0.5 e a ESP-PED-001 v2.1; ainda não submetido ao gate G1 do QA |
+| Especificação (ESP-NEG-001 v1.3) | Rascunho alinhado com a ESP-MRC-001 v0.7 e a ESP-PED-001 v2.2; ainda não submetido ao gate G1 do QA |
 | Contratos de eventos | Schemas JSON e exemplos para os 7 tópicos, validados também contra os schemas do Mercado e do Pedidos |
-| Código (`services/negociacao-service/`) | Não iniciado; começa depois do G1 |
-| Alinhamento com Mercado e Pedidos | Fechado em 19/11 (INT-NEG-01 a INT-NEG-03); INT-NEG-13 fechada com o Pedidos; resta INT-NEG-12 a comunicar |
+| Código (`services/negociacao-service/`) | Em andamento; G1 em paralelo |
+| Alinhamento com Mercado e Pedidos | Fechado em 19/11 (INT-NEG-01 a INT-NEG-03); INT-NEG-13 fechada com o Pedidos; IDs com até 64 caracteres no Mercado desde a v0.6 (INT-NEG-12, fechada em 22/11) |
 | Tópicos novos na Infra | `pedido_temporario_solicitado` e consumidores a pedir (INT-NEG-05) |
 
 ## Documentos
@@ -35,8 +35,9 @@ O serviço conduz as negociações que o Mercado define: leilões em que comprad
 **Negociação direta (`VENDA_DIRETA`)**
 
 1. O comprador pede a negociação no Mercado, que publica `modo_negociacao_definido`. O serviço abre a negociação com a proposta do fornecedor pelo preço da oferta e pede o pedido temporário.
-2. A vez começa com o comprador. As partes alternam contrapropostas de preço unitário. A parte da vez pode aceitar (`ENCERRADO`, com a reserva confirmada), e qualquer uma pode recusar (`RECUSADO`).
+2. A vez começa com o comprador. As partes alternam contrapropostas de preço unitário, nunca acima do preço da oferta. A parte da vez pode aceitar (`ENCERRADO`, com a reserva confirmada), e qualquer uma pode recusar (`RECUSADO`).
 3. Depois de 48 h sem resposta, a negociação vira `EXPIRADO`.
+4. **Compra imediata:** se o comprador pediu a compra pelo preço anunciado (`compraImediata` no pedido ao Mercado), ninguém propõe, aceita ou recusa. A negociação fecha sozinha: `ENCERRADO` quando a reserva confirma, `RECUSADO` se ela for recusada, `EXPIRADO` depois de 48 h sem reserva.
 
 Fora do escopo:
 - comparar oferta × demanda, sugerir o leilão, formar o lote e validar a negociação direta (Mercado);
@@ -65,9 +66,7 @@ Não consome eventos do Fornecimento, da Demanda nem do Identity. A autenticaç�
 
 | Grupo | Pendência |
 |---|---|
-| Mercado | Limitar a 64 caracteres os IDs de oferta, fornecedor, produto, comprador e demanda (INT-NEG-12) |
 | Infra | Criar `pedido_temporario_solicitado`; registrar o Negociação como consumidor de `leilao_iniciado`, `modo_negociacao_definido` e `pedido_atualizado`, e o Mercado como consumidor de `negociacao_fechada` |
 | Banco de Dados | DDL do schema `negociacao` (tabelas na seção 6 da ESP), `NUMERIC(18,4)` para dinheiro e quantidade decimal |
-| Autenticação | Divergência no formato de erro (`codigo` × `code`), a mesma do INT-PED-08 |
-| Professor | Confirmar que o lance é o valor total do lote e o rateio pela participação no valor |
+| Mercado | Publicar o campo `compraImediata` no `POST /api/v1/mercado/negociacoes` e no `modo_negociacao_definido` (INT-NEG-14, combinado em 25/11) |
 | QA | Revisar a ESP no gate G1 |
