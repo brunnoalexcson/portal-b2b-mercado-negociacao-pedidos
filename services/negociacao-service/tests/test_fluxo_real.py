@@ -466,3 +466,98 @@ def test_abertura_recalculo_de_lote_e_deserto_no_leilao():
         "produtoId": PRODUTO,
         "alocacoes": [],
     }
+
+
+def test_lances_sigilo_eventos_e_persistencia_no_leilao():
+    leilao_id = str(uuid4())
+    comprador_b = f"comprador-b-{SUFIXO}"
+    demanda_b = f"demanda-b-{SUFIXO}"
+    jwt_comprador_a = token(COMPRADOR, "BUYER")
+    jwt_comprador_b = token(comprador_b, "BUYER")
+    jwt_fornecedor_a = token(FORNECEDOR_A, "SUPPLIER")
+
+    publicar(leilao_iniciado(leilao_id))
+    esperar(lambda: get_negociacao(leilao_id, jwt_comprador_a).status_code == 200)
+
+    publicar(
+        confirmacao_reserva(leilao_id, str(uuid4()), fornecimento_id=OFERTA_A),
+        confirmacao_reserva(leilao_id, str(uuid4()), fornecimento_id=OFERTA_B),
+    )
+    esperar(
+        lambda: d if (d := loads(get_negociacao(leilao_id, jwt_comprador_a).text))["status"] == "ABERTO" else None,
+    )
+
+    r_insuficiente = httpx.post(
+        f"{API}/api/v1/negociacoes/{leilao_id}/lances",
+        content=dumps({"valor": D("2549.99"), "demandaId": DEMANDA}),
+        headers={"Authorization": f"Bearer {jwt_comprador_a}", "Content-Type": "application/json"},
+        timeout=5,
+    )
+    assert r_insuficiente.status_code == 422
+    assert loads(r_insuficiente.text)["codigo"] == "LANCE_INSUFICIENTE"
+
+    r_lance_1 = httpx.post(
+        f"{API}/api/v1/negociacoes/{leilao_id}/lances",
+        content=dumps({"valor": D("2550.00"), "demandaId": DEMANDA}),
+        headers={"Authorization": f"Bearer {jwt_comprador_a}", "Content-Type": "application/json"},
+        timeout=5,
+    )
+    assert r_lance_1.status_code == 201
+    lance_1 = loads(r_lance_1.text)
+    assert (lance_1["compradorId"], lance_1["valor"], lance_1["sequencia"]) == (COMPRADOR, D("2550.00"), 1)
+    assert "demandaId" not in lance_1
+
+    r_lance_2 = httpx.post(
+        f"{API}/api/v1/negociacoes/{leilao_id}/lances",
+        content=dumps({"valor": D("2600.00"), "demandaId": demanda_b}),
+        headers={"Authorization": f"Bearer {jwt_comprador_b}", "Content-Type": "application/json"},
+        timeout=5,
+    )
+    assert r_lance_2.status_code == 201
+    lance_2 = loads(r_lance_2.text)
+    assert (lance_2["compradorId"], lance_2["valor"], lance_2["sequencia"]) == (comprador_b, D("2600.00"), 2)
+    assert "demandaId" not in lance_2
+
+    eventos_lance = ler(
+        "lance_realizado", lambda v: v.get("aggregateId") == leilao_id, esperar_extras=1.5, minimo=2,
+    )
+    assert len(eventos_lance) == 2
+    (chave_1, ev_1), (chave_2, ev_2) = eventos_lance
+    assert chave_1 == chave_2 == leilao_id
+    assert ev_1["payload"] == {
+        "negociacaoId": leilao_id,
+        "lanceId": lance_1["lanceId"],
+        "compradorId": COMPRADOR,
+        "valor": D("2550.00"),
+        "sequencia": 1,
+        "criadoEm": lance_1["criadoEm"],
+    }
+    assert ev_2["payload"] == {
+        "negociacaoId": leilao_id,
+        "lanceId": lance_2["lanceId"],
+        "compradorId": comprador_b,
+        "valor": D("2600.00"),
+        "sequencia": 2,
+        "criadoEm": lance_2["criadoEm"],
+    }
+
+    detalhe_perdedor = loads(get_negociacao(leilao_id, jwt_comprador_a).text)
+    assert detalhe_perdedor["totalLances"] == 2
+    assert detalhe_perdedor["melhorLance"] == {**lance_2, "compradorId": "OCULTO"}
+
+    detalhe_vencedor = loads(get_negociacao(leilao_id, jwt_comprador_b).text)
+    assert detalhe_vencedor["melhorLance"] == lance_2
+
+    detalhe_fornecedor = loads(get_negociacao(leilao_id, jwt_fornecedor_a).text)
+    assert detalhe_fornecedor["melhorLance"] == lance_2
+
+    with psycopg.connect(DSN) as conexao:
+        linhas = conexao.execute(
+            "SELECT id::text, negociacao_id::text, comprador_id, valor, demanda_id, sequencia "
+            "FROM negociacao.lance WHERE negociacao_id = %s ORDER BY sequencia",
+            (leilao_id,),
+        ).fetchall()
+    assert linhas == [
+        (lance_1["lanceId"], leilao_id, COMPRADOR, D("2550.00"), DEMANDA, 1),
+        (lance_2["lanceId"], leilao_id, comprador_b, D("2600.00"), demanda_b, 2),
+    ]

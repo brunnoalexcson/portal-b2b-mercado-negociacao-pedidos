@@ -7,12 +7,13 @@ from uuid import UUID
 import pytest
 
 from app.contratos import (
-    MAX_QUANTIDADE, MAX_VALOR, EventoInvalido, chave_dlt, corpo_proposta, corpo_vazio, evento_dlt,
+    MAX_QUANTIDADE, MAX_VALOR, EventoInvalido, chave_dlt, corpo_lance, corpo_proposta, corpo_vazio, evento_dlt,
     pedido_temporario_leilao, validar_evento,
 )
 from app.dominio import (
     Ator, aceitando, acoes_leilao, acoes_permitidas, alocacao, detalhe_direta, detalhe_leilao, fornecedor_do_leilao,
-    incremento_minimo, oferta_leilao, participante, participacoes, recalcular_lote, resumo, sigilo, visivel,
+    incremento_minimo, lance, lance_com_sigilo, leilao_aberto, oferta_leilao, participante, participacoes,
+    recalcular_lote, resumo, sigilo, visivel,
 )
 from app.jsonio import fingerprint, loads
 from tests.cenarios import (
@@ -512,6 +513,89 @@ def test_acoes_leilao_escopo_status_conflito_e_prazo():
         assert acoes_leilao(_negociacao_leilao(status=status), ofertas, Ator("u1", COMP_X, "BUYER"), T0) == []
 
 
+def test_leilao_aberto_status_e_limites_de_data_fim():
+    leilao = _negociacao_leilao(status="ABERTO")
+    fim = leilao["dataFim"]
+
+    assert leilao_aberto(leilao, T0) is True
+    assert leilao_aberto(leilao, fim - timedelta(milliseconds=1)) is True
+    assert leilao_aberto(leilao, fim) is False
+    assert leilao_aberto(leilao, fim + timedelta(milliseconds=1)) is False
+    for status in ("AGUARDANDO_RESERVAS", "ENCERRADO", "DESERTO"):
+        assert leilao_aberto(_negociacao_leilao(status=status), T0) is False
+
+
+def test_lance_e_lance_com_sigilo_formatam_valor_omitem_campos_internos_e_mascaram_concorrente():
+    ofertas = _ofertas_l1()
+    ofertas[1]["situacao"] = "RECUSADA"
+    registro = {
+        "lanceId": "33000000-0000-4000-8000-000000000002",
+        "negociacaoId": L1,
+        "compradorId": COMP_Y,
+        "usuarioId": "c3000000-0000-4000-8000-000000000002",
+        "valor": D("2600"),
+        "demandaId": "36000000-0000-4000-8000-000000000002",
+        "sequencia": 2,
+        "criadoEm": T0,
+    }
+
+    sem_mascara = lance(registro)
+    assert sem_mascara == {
+        "lanceId": "33000000-0000-4000-8000-000000000002",
+        "negociacaoId": L1,
+        "compradorId": COMP_Y,
+        "valor": D("2600.00"),
+        "sequencia": 2,
+        "criadoEm": T0,
+    }
+    assert "usuarioId" not in sem_mascara
+    assert "demandaId" not in sem_mascara
+
+    assert lance_com_sigilo(registro, ofertas, Ator("u1", COMP_Y, "BUYER"))["compradorId"] == COMP_Y
+    assert lance_com_sigilo(registro, ofertas, Ator("u2", FORN_A, "SUPPLIER"))["compradorId"] == COMP_Y
+    assert lance_com_sigilo(registro, ofertas, Ator("u3", FORN_B, "BUYER"))["compradorId"] == COMP_Y
+    assert lance_com_sigilo(registro, ofertas, Ator("u4", COMP_X, "BUYER")) == {
+        **sem_mascara,
+        "compradorId": "OCULTO",
+    }
+    assert lance_com_sigilo(registro, ofertas, Ator("u5", FORN_C, "SUPPLIER"))["compradorId"] == "OCULTO"
+
+
+def test_corpo_lance_valido_e_casos_invalidos():
+    assert corpo_lance({"valor": D("2550.00")}) == (D("2550.00"), None)
+    assert corpo_lance({"valor": 2550, "demandaId": None}) == (D("2550"), None)
+    assert corpo_lance({"valor": D("0.01"), "demandaId": "dem_1.a-B"}) == (D("0.01"), "dem_1.a-B")
+    assert corpo_lance({"valor": MAX_VALOR, "demandaId": "d" * 64}) == (MAX_VALOR, "d" * 64)
+
+    invalidos = [
+        {"valor": D("2550.00"), "demandaId": ""},
+        {"valor": D("2550.00"), "demandaId": "d" * 65},
+        {"valor": D("2550.00"), "demandaId": "dem 1"},
+        {"valor": D("2550.00"), "demandaId": " "},
+        {"valor": D("2550.00"), "demandaId": 1},
+        {"valor": D("2550.00"), "demandaId": True},
+        {"valor": D("2550.00"), "demandaId": []},
+        {"valor": "2550.00"},
+        {"valor": 0},
+        {"valor": D("0.00")},
+        {"valor": -1},
+        {"valor": D("-0.01")},
+        {"valor": D("2550.001")},
+        {"valor": 2550.0},
+        {"valor": True},
+        {"valor": False},
+        {"valor": MAX_VALOR + D("0.01")},
+        {"valor": D("2550.00"), "extra": 1},
+        {"demandaId": "dem-1"},
+        {},
+        None,
+        [],
+    ]
+    for caso in invalidos:
+        with pytest.raises(EventoInvalido):
+            corpo_lance(caso)
+
+
 def test_oferta_leilao_e_detalhe_leilao_formatam_campos_e_aplicam_sigilo():
     ofertas = _ofertas_l1()
     proj_oferta = oferta_leilao(ofertas[0])
@@ -529,7 +613,7 @@ def test_oferta_leilao_e_detalhe_leilao_formatam_campos_e_aplicam_sigilo():
     assert "pedidoId" not in proj_oferta
 
     leilao = _negociacao_leilao(compradorId=COMP_Y)
-    detalhe_terceiro = detalhe_leilao(leilao, ofertas, Ator("u1", COMP_X, "BUYER"), T0)
+    detalhe_terceiro = detalhe_leilao(leilao, ofertas, None, Ator("u1", COMP_X, "BUYER"), T0)
     assert detalhe_terceiro["quantidadeTotal"] == D("20.00")
     assert detalhe_terceiro["precoInicial"] == D("2550.00")
     assert detalhe_terceiro["incrementoMinimo"] == D("25.50")
@@ -542,9 +626,34 @@ def test_oferta_leilao_e_detalhe_leilao_formatam_campos_e_aplicam_sigilo():
     assert "melhorLanceId" not in detalhe_terceiro
     assert "correlationId" not in detalhe_terceiro
 
-    detalhe_fornecedor = detalhe_leilao(leilao, ofertas, Ator("u2", FORN_A, "SUPPLIER"), T0)
+    detalhe_fornecedor = detalhe_leilao(leilao, ofertas, None, Ator("u2", FORN_A, "SUPPLIER"), T0)
     assert detalhe_fornecedor["compradorId"] == COMP_Y
     assert detalhe_fornecedor["acoesPermitidas"] == []
+
+    melhor = {
+        "lanceId": "33000000-0000-4000-8000-000000000002",
+        "negociacaoId": L1,
+        "compradorId": COMP_Y,
+        "usuarioId": "c3000000-0000-4000-8000-000000000002",
+        "valor": D("2600"),
+        "demandaId": "36000000-0000-4000-8000-000000000002",
+        "sequencia": 2,
+        "criadoEm": T0,
+    }
+    leilao_com_lance = _negociacao_leilao(melhorLanceId=melhor["lanceId"], totalLances=2)
+    detalhe_concorrente = detalhe_leilao(leilao_com_lance, ofertas, melhor, Ator("u1", COMP_X, "BUYER"), T0)
+    assert detalhe_concorrente["melhorLance"] == {
+        "lanceId": melhor["lanceId"],
+        "negociacaoId": L1,
+        "compradorId": "OCULTO",
+        "valor": D("2600.00"),
+        "sequencia": 2,
+        "criadoEm": T0,
+    }
+    detalhe_autor = detalhe_leilao(leilao_com_lance, ofertas, melhor, Ator("u3", COMP_Y, "BUYER"), T0)
+    assert detalhe_autor["melhorLance"]["compradorId"] == COMP_Y
+    detalhe_forn_com_lance = detalhe_leilao(leilao_com_lance, ofertas, melhor, Ator("u2", FORN_A, "SUPPLIER"), T0)
+    assert detalhe_forn_com_lance["melhorLance"]["compradorId"] == COMP_Y
 
     assert pedido_temporario_leilao(leilao, ofertas[0]) == {
         "negociacaoId": L1,
