@@ -4,23 +4,23 @@ Responsável: Brunno Alexcson. Porta `8105`, rotas `/api/v1/mercado`, schema Pos
 
 O serviço acompanha, por produto, a oferta disponível e a demanda aberta do portal e decide como cada compra é negociada: negociação direta entre um comprador e a oferta que ele escolher, ou leilão em lote quando a demanda supera a oferta e os fornecedores aceitam a sugestão de leilão. É o bloco 5 do diagrama da arquitetura ("calcula oferta vs demanda, define modo de negociação, inicia leilões quando necessário").
 
-## Situação em 25/11/2026 (v0.7)
+## Situação em 25/11/2026 (v0.8)
 
 | Item | Situação |
 |---|---|
-| Especificação (ESP-MRC-001 v0.7) | Rascunho no modelo ERS-LLM v1.2 do QA, antes do gate G1; 17 RFs, 59 CAs, decisões DG-01 a DG-57 |
+| Especificação (ESP-MRC-001 v0.8) | Rascunho no modelo ERS-LLM v1.2 do QA, antes do gate G1; 17 RFs, 59 CAs, decisões DG-01 a DG-58 |
 | Contratos de eventos | Schemas JSON e exemplos validados para os 12 tópicos; conferidos contra os contratos do Pedidos e do Fornecimento |
 | Código (`services/mercado-service/`) | Não iniciado; segue a estrutura do `pedidos-service` |
 | Alinhamento com Pedidos | Fechado em 19/11 (INT-MRC-02): a ESP-PED-001 não muda |
 | Alinhamento com Fornecimento e Produtos | Fechado em 25/11 (INT-MRC-05): o contrato de eventos v2.5 (23/11) registra o Mercado como consumidor dos 5 eventos de produto e oferta; o documento de requisitos (v0.13) e a ESP-PRD-001 (v2.3) foram alinhados no PR #45 e a issue #44 de `davicalvarenga/Sistema-MicServ-SD` foi fechada |
 | Alinhamento com Compra e Demanda | Issues [#1](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/1) e [#2](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/2) abertas em 25/11 (INT-MRC-04), **aguardando resposta do Lucca** |
-| Alinhamento com Negociação | Fechado em 19/11 (INT-MRC-01): a ESP-NEG-001 v1.2 aceitou todos os ajustes (INT-NEG-03, D33 a D42) |
+| Alinhamento com Negociação | Fluxo fechado em 19/11 (INT-MRC-01, ESP-NEG-001 v1.2). Pedidos novos: [issue #11](https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/issues/11) de 25/11 (rateio, incremento, D40 e participação no recálculo, INT-MRC-11) e compra imediata (INT-MRC-10), **aguardando o Caio** |
 | Alinhamento com Autenticação | Fechado em 25/11 (INT-MRC-07): a resposta do Identity na issue #4 (23/11) já está no §7.1 da ESP; o formato de erro do Mercado continua o do §10 |
 | Status Report | Decisões marcadas com "Status Report: sim" na seção 13 da ESP |
 
 ## Documentos
 
-- [Especificação ESP-MRC-001](requisitos.md): regras, rotas, eventos, erros, critérios de aceitação e decisões DG-01 a DG-57, pendências de integração INT-MRC-01 a INT-MRC-09 e pontos fora desta versão (seção 13).
+- [Especificação ESP-MRC-001](requisitos.md): regras, rotas, eventos, erros, critérios de aceitação e decisões DG-01 a DG-58, pendências de integração INT-MRC-01 a INT-MRC-11 e pontos fora desta versão (seção 13).
 - [Contratos de eventos](contratos/): um `<topico>.schema.json` (JSON Schema 2020-12) e um `<topico>.exemplo.json` por tópico consumido e publicado.
 
 ## Como o serviço funciona
@@ -39,12 +39,13 @@ O serviço acompanha, por produto, a oferta disponível e a demanda aberta do po
 2. O Mercado confere aptidão, preço máximo, saldo da demanda e disponível da oferta, e publica `modo_negociacao_definido`.
 3. A Negociação abre a direta com o mesmo `negociacaoId` e pede o pedido temporário ao Pedidos (`pedido_temporario_solicitado`).
 4. Uma demanda pode ter várias negociações abertas com ofertas diferentes, até o seu saldo (atendimento parcial).
+5. Compra imediata: com `"compraImediata": true`, o comprador compra pelo preço da oferta, sem troca de propostas. A Negociação encerra a direta sozinha quando a reserva é confirmada.
 
 **Leilão (`LEILAO_DIRETO`)**
 
-1. Quando a demanda supera a oferta, abre uma sugestão de leilão para os fornecedores do produto.
+1. Quando há oferta e a demanda passa da oferta acima do percentual configurado (`EXCESSO_DEMANDA_MINIMO_PERCENTUAL`, padrão 0), abre uma sugestão de leilão para os fornecedores do produto.
 2. Cada fornecedor decide se entra no lote e com quanto; pode alterar ou sair até T1.
-3. O lote fecha (T1) no fim da janela de adesão, quando todos os fornecedores elegíveis entraram ou quando a oferta volta a cobrir a demanda.
+3. O lote fecha (T1) no fim da janela de adesão, quando todos os fornecedores elegíveis entraram ou quando o gatilho do passo 1 deixa de valer (a oferta volta a cobrir a demanda ou chega a zero).
 4. Em T1, o Mercado calcula o preço inicial (soma de quantidade × preço), o incremento mínimo e a participação de cada fornecedor no valor do lote, e publica `modo_negociacao_definido` e `leilao_iniciado`. T2 = T1 + duração configurada.
 5. A Negociação pede o pedido temporário de cada item e só libera os lances com todas as reservas confirmadas. Item com reserva recusada sai do lote antes do primeiro lance, e ela recalcula o preço inicial.
 6. Lances, vencedor e rateio do valor são da Negociação. O Mercado recebe o `negociacao_fechada` para atualizar o saldo das demandas; só o primeiro fechamento de cada negociação é aplicado.
@@ -88,7 +89,7 @@ Segue o diagrama: o Mercado inicia os leilões e publica `modo_negociacao_defini
 
 | Grupo | Pendência |
 |---|---|
-| Negociação | Código consumindo `leilao_iniciado` e `modo_negociacao_definido` e teste com o Mercado (prazo: 30/11); na ESP-NEG-001, fechar a INT-NEG-12 (issue #7) e atualizar as referências |
+| Negociação | Código consumindo `leilao_iniciado` e `modo_negociacao_definido` e teste com o Mercado (prazo: 30/11); na ESP-NEG-001, fechar a INT-NEG-12 (issue #7) e atualizar as referências; [issue #11](https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/issues/11) (INT-MRC-11); compra imediata (INT-MRC-10) |
 | Infra | Criar `demanda_cancelada`, `produto_atualizado` e `fornecimento_atualizado`; registrar o Mercado como produtor e consumidor dos tópicos; retirar o Mercado dos consumidores de `lance_realizado`; retirar do `01-init.sql` as tabelas de exemplo do schema `mercado` (DG-56); rota do gateway |
 | Compra e Demanda | Aguardando resposta das duas issues abertas em 25/11 (INT-MRC-04):<br>[#1](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/1) Mercado × Compra e Demanda: confirmar os 3 eventos de demanda e alinhar preço máximo, UF, cidade e tamanho dos IDs<br>[#2](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/2) Mercado × Compra e Demanda: produto excluído, demanda recorrente, casas decimais e chave das mensagens |
 | Banco de Dados | Validar as tabelas do §6.1 e os tipos decimais (o DR-BD-002 não tem tabelas do Mercado); responder pelo Teams (INT-MRC-06) |

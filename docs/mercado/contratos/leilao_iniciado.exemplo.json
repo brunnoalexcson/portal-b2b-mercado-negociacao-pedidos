@@ -14,6 +14,7 @@
     "quantidadeTotal": 100.00,
     "precoInicial": 780.00,
     "incrementoMinimo": 7.80,
+    "incrementoMinimoPercentual": 1.00,
     "itens": [
       {
         "fornecimentoId": "34000000-0000-4000-8000-000000000001",
