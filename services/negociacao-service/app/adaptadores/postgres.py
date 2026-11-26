@@ -6,7 +6,7 @@ from uuid import UUID
 from psycopg import Error as ErroPostgres
 from psycopg import OperationalError
 from psycopg.rows import dict_row
-from psycopg.types.json import Jsonb, set_json_loads
+from psycopg.types.json import set_json_loads
 from psycopg_pool import ConnectionPool, PoolTimeout
 
 from app.jsonio import dumps, loads
@@ -163,7 +163,10 @@ class Postgres:
         linha = self.conexao().execute(
             "SELECT * FROM negociacao.idempotency_keys WHERE escopo = %s", (escopo,),
         ).fetchone()
-        return None if linha is None else _campos(IDEMPOTENCIA, linha)
+        if linha is None:
+            return None
+        registro = _campos(IDEMPOTENCIA, linha)
+        return {**registro, "corpo": loads(registro["corpo"])}
 
     def salvar_idempotencia(self, escopo, registro):
         self.conexao().execute(
@@ -171,7 +174,7 @@ class Postgres:
             "VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (escopo) DO UPDATE SET hash_corpo = EXCLUDED.hash_corpo, "
             "status = EXCLUDED.status, corpo = EXCLUDED.corpo, location = EXCLUDED.location, "
             "criado_em = EXCLUDED.criado_em",
-            (escopo, registro["hashCorpo"], registro["status"], Jsonb(registro["corpo"], dumps=dumps),
+            (escopo, registro["hashCorpo"], registro["status"], dumps(registro["corpo"]),
              registro["location"], registro["criadoEm"]),
         )
 
