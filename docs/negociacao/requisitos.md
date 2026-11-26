@@ -5,11 +5,11 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-NEG-001 |
-| Versão | 1.4 |
+| Versão | 1.5 |
 | Status | Rascunho |
 | Serviço / Bounded context | `negociacao-service` (microsserviço 6 do Portal B2B Distribuído): Negociação e Leilão. Porta `8106`, rotas `/api/v1/negociacoes`, schema PostgreSQL `negociacao`, role `svc_negociacao` |
 | Autores (PO / Dev / QA) | PO e Dev: Caio Almeida Oliveira (grupo Mercado, Negociação/Leilão e Pedidos). QA: Grupo de Teste e Qualidade (revisão no gate G1) |
-| Data | 2026-11-25 |
+| Data | 2026-11-26 |
 | Documentos relacionados | ESP-MRC-001 v0.8 (`docs/mercado/requisitos.md`, revisão `49ca1fc`); ESP-PED-001 v2.2 (`docs/pedidos/requisitos.md`, revisão `0f8664b`); contratos de eventos em `docs/negociacao/contratos/`; kit de Infraestrutura (`CONTRACTS.md` e `ORIENTACOES-ARQUITETURA-GRUPOS.md`, revisão `630515c`); Identity-Service (revisão `800f2d8` e resposta na issue Matheus-Allvz/Identity-Service#27); DR-BD-002 v1.0; modelo ERS-LLM v1.2 do QA (revisão `efc05b6`) |
 
 ## 1. Diretivas para a LLM geradora
@@ -816,7 +816,7 @@ Exemplos (iguais a `docs/negociacao/contratos/<topico>.exemplo.json`):
 }
 ```
 
-`negociacao_fechada` (leilão conjunto encerrado; rateio do lance de 2600.00 pelas participações 0.2353 e 0.7647):
+`negociacao_fechada` (leilão conjunto encerrado; rateio do lance de 2600.00 na proporção exata do valor de cada oferta, 600.00 e 1950.00):
 
 ```json
 {
@@ -1624,7 +1624,7 @@ Respostas fora do catálogo: rota inexistente (404) e método não permitido (40
 
 | ID | Característica (ISO/IEC 25010) | Requisito | Métrica e limiar | Verificação |
 |---|---|---|---|---|
-| RNF-01 | Adequação funcional — exatidão | Aritmética monetária com `Decimal` e saída com 2 casas. | Lote de 1.00 × 0.10 e 1.00 × 0.20 (preço inicial 0.30) → lance 0.30 aceito e alocações 0.09 e 0.21; lance `2550` devolvido como `2550.00`; soma das alocações = lance vencedor em 100% dos encerramentos. | CA-51 |
+| RNF-01 | Adequação funcional — exatidão | Aritmética monetária com `Decimal` e saída com 2 casas. | Lote de 1.00 × 0.10 e 1.00 × 0.20 (preço inicial 0.30) → lance 0.30 aceito e alocações 0.10 e 0.20; lance `2550` devolvido como `2550.00`; soma das alocações = lance vencedor em 100% dos encerramentos. | CA-51 |
 | RNF-02 | Interoperabilidade | Formato único de erro. | 100% das respostas 4xx e 5xx de negócio em `application/problem+json` com os 8 campos do §10. | CA-52 |
 | RNF-03 | Confiabilidade — ordenação | Eventos da mesma negociação na mesma partição e envelope do kit. | 100% das mensagens publicadas (exceto DLT) com `key == aggregateId == negociacaoId`, `eventType` = tópico, `eventVersion` `"1.0"`, `source` `"negociacao-service"`, `timestamp` = relógio e `eventId` UUID distinto; 100% válidas contra `docs/negociacao/contratos/<topico>.schema.json`. | CA-53 |
 | RNF-04 | Manutenibilidade — modularidade | Dependências permitidas e estado só nas portas. | Nenhum import fora do §5 nos módulos de domínio; duas aplicações de `create_app` com repositórios diferentes não compartilham negociações. | CA-54 |
@@ -1644,7 +1644,7 @@ Cenário: Exatidão decimal
   Quando token(BUYER, COMP-X) envia {"valor": 0.30}
   Então a resposta é 201 com valor 0.30
   Quando L4 é encerrado com esse lance
-  Então alocacoes tem valorTotal 0.09 (OF-A) e 0.21 (OF-B), somando 0.30
+  Então alocacoes tem valorTotal 0.10 (OF-A) e 0.20 (OF-B), somando 0.30
   E no leilão L1 com precoInicial 2550.00, o lance {"valor": 2550} é devolvido com valor 2550.00
 
 # CA-52
@@ -1858,3 +1858,4 @@ Pré-conferência do autor antes do gate G1; o QA confirma ou desmarca cada item
 | 1.2 | 2026-11-19 | Caio Almeida Oliveira | Alinhamento com a ESP-MRC-001 v0.5 e a ESP-PED-001 v2.1 (D33 a D42): o Mercado abre o leilão (`leilao_iniciado`) e a negociação direta (`modo_negociacao_definido`) e este serviço deixa de criá-los por HTTP; status `AGUARDANDO_RESERVAS` e liberação dos lances com as reservas resolvidas; rateio pela participação no valor; incremento mínimo; `demandaId` no lance e no fechamento; sem cópia local das ofertas; `tipo` `VENDA_DIRETA` e `compradorId` nulo fora de `ENCERRADO`; `demandaId` com até 64 caracteres. APIs, RFs, RNs e CAs renumerados; INT-NEG-01 a INT-NEG-04 fechadas; INT-NEG-12 nova; INT-NEG-13 nova e fechada com o Pedidos. |
 | 1.3 | 2026-11-25 | Caio Almeida Oliveira | Teto da proposta na negociação direta (D43, RN-23, erro `PROPOSTA_ACIMA_DA_OFERTA`, CA-25 ampliada). DLT igual ao kit, ao Mercado e ao Pedidos (D44, RN-19, RF-15, CA-49, §5.1, §7.4, §13.1 e schema da `negociacao.dlt`; issue #10). INT-NEG-07 fechada pela resposta do Identity-Service, INT-NEG-12 pela ESP-MRC-001 v0.6 e INT-NEG-10 decidida sem consulta ao professor; compra imediata com o campo `compraImediata` combinado com o Mercado (D46, RN-24, erro `COMPRA_IMEDIATA`, CA-62 e CA-63; INT-NEG-14 aberta e fechada); glossário com os estados finais ("Deserto", "Encerrado", "Recusado", "Expirado") e "Negociação direta" revista; prorrogação do leilão e lance automático fora do escopo (§3.2); migração apaga as tabelas de exemplo do kit (D45, §6.1); INT-NEG-05 e INT-NEG-06 classificadas como dependências externas; documentos relacionados apontam para a ESP-MRC-001 v0.8 e a ESP-PED-001 v2.2. Alinhamento com a v0.8 do Mercado: exemplos com `compraImediata` e `incrementoMinimoPercentual`, que passa a ser obrigatório no `leilao_iniciado` e é usado no recálculo do incremento (D47, RN-05). Sem mudança de evento, status ou contrato com Mercado e Pedidos. |
 | 1.4 | 2026-11-25 | Caio Almeida Oliveira | Pedidos da issue #11 do Mercado: rateio na proporção exata de `valorItem`, sem a participação arredondada (RN-11, D36; CA-20, CA-23 e exemplo de `negociacao_fechada` com os valores novos); participação recalculada pelo maior resto com piso de `0.0001`, igual à RN-23 da ESP-MRC-001 (RN-05, D48, CA-10); motivo da D40 corrigido. O incremento pelo percentual já tinha entrado na v1.3 (D47). |
+| 1.5 | 2026-11-26 | Caio Almeida Oliveira | CA-51 e RNF-01 alinhadas à RN-11 da v1.4: o lance 0.30 sobre o lote 0.10 + 0.20 gera alocações 0.10 e 0.20 pela proporção exata (os 0.09 e 0.21 vinham do rateio pela participação). Título do exemplo de `negociacao_fechada` no §7.4 sem a referência às participações. Achado na implementação do encerramento do leilão. |
