@@ -102,7 +102,7 @@ def recusa_reserva(negociacao_id: str, pedido_id: str, fornecimento_id: str = OF
     })
 
 
-def leilao_iniciado(negociacao_id: str) -> dict:
+def leilao_iniciado(negociacao_id: str, duracao: timedelta = timedelta(hours=2)) -> dict:
     agora = datetime.now(timezone.utc)
     return evento("leilao_iniciado", "mercado-service", negociacao_id, {
         "negociacaoId": negociacao_id,
@@ -134,7 +134,7 @@ def leilao_iniciado(negociacao_id: str) -> dict:
             },
         ],
         "iniciaEm": formato_json(agora),
-        "encerraEm": formato_json(agora + timedelta(hours=2)),
+        "encerraEm": formato_json(agora + duracao),
     })
 
 
@@ -561,3 +561,84 @@ def test_lances_sigilo_eventos_e_persistencia_no_leilao():
         (lance_1["lanceId"], leilao_id, COMPRADOR, D("2550.00"), DEMANDA, 1),
         (lance_2["lanceId"], leilao_id, comprador_b, D("2600.00"), demanda_b, 2),
     ]
+
+
+def test_encerramento_automatico_e_rateio_no_leilao():
+    leilao_id = str(uuid4())
+    pedido_a = str(uuid4())
+    pedido_b = str(uuid4())
+    comprador_b = f"comprador-b-{SUFIXO}"
+    demanda_b = f"demanda-b-{SUFIXO}"
+    jwt_comprador_a = token(COMPRADOR, "BUYER")
+    jwt_comprador_b = token(comprador_b, "BUYER")
+
+    publicar(leilao_iniciado(leilao_id, duracao=timedelta(seconds=20)))
+    esperar(lambda: get_negociacao(leilao_id, jwt_comprador_a).status_code == 200)
+
+    publicar(
+        confirmacao_reserva(leilao_id, pedido_a, fornecimento_id=OFERTA_A),
+        confirmacao_reserva(leilao_id, pedido_b, fornecimento_id=OFERTA_B),
+    )
+    esperar(
+        lambda: d if (d := loads(get_negociacao(leilao_id, jwt_comprador_a).text))["status"] == "ABERTO" else None,
+    )
+
+    r_lance_1 = httpx.post(
+        f"{API}/api/v1/negociacoes/{leilao_id}/lances",
+        content=dumps({"valor": D("2550.00")}),
+        headers={"Authorization": f"Bearer {jwt_comprador_a}", "Content-Type": "application/json"},
+        timeout=5,
+    )
+    assert r_lance_1.status_code == 201
+
+    r_lance_2 = httpx.post(
+        f"{API}/api/v1/negociacoes/{leilao_id}/lances",
+        content=dumps({"valor": D("2600.00"), "demandaId": demanda_b}),
+        headers={"Authorization": f"Bearer {jwt_comprador_b}", "Content-Type": "application/json"},
+        timeout=5,
+    )
+    assert r_lance_2.status_code == 201
+
+    encerrado = esperar(
+        lambda: d if (d := loads(get_negociacao(leilao_id, jwt_comprador_b).text))["status"] == "ENCERRADO" else None,
+        limite=40.0,
+    )
+    assert encerrado["compradorId"] == comprador_b
+    assert encerrado["encerradoEm"] is not None
+    assert encerrado["acoesPermitidas"] == []
+    assert loads(get_negociacao(leilao_id, jwt_comprador_a).text)["compradorId"] == "OCULTO"
+
+    fechamentos = ler(
+        "negociacao_fechada", lambda v: v.get("aggregateId") == leilao_id, esperar_extras=1.5,
+    )
+    assert len(fechamentos) == 1
+    chave, fechada = fechamentos[0]
+    assert chave == leilao_id
+    assert fechada["payload"] == {
+        "negociacaoId": leilao_id,
+        "tipo": "LEILAO",
+        "status": "ENCERRADO",
+        "compradorId": comprador_b,
+        "demandaId": demanda_b,
+        "produtoId": PRODUTO,
+        "alocacoes": [
+            {
+                "fornecimentoId": OFERTA_A,
+                "fornecedorId": FORNECEDOR_A,
+                "pedidoId": pedido_a,
+                "quantidade": D("5.00"),
+                "valorUnitario": D("122.35"),
+                "valorTotal": D("611.76"),
+            },
+            {
+                "fornecimentoId": OFERTA_B,
+                "fornecedorId": FORNECEDOR_B,
+                "pedidoId": pedido_b,
+                "quantidade": D("15.00"),
+                "valorUnitario": D("132.55"),
+                "valorTotal": D("1988.24"),
+            },
+        ],
+    }
+    assert sum(a["valorTotal"] for a in fechada["payload"]["alocacoes"]) == D("2600.00")
+
