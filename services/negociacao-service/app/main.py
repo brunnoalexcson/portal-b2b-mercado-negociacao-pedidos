@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI
 
+from app.dominio import Negociacoes
 from app.http import SERVICO, configurar_http
 from app.jsonio import formato_json
 from app.portas import ChavesPublicas, Clock, EventBus, NegociacaoRepositorio
@@ -26,6 +27,10 @@ def create_app(event_bus: EventBus, clock: Clock, repositorio: NegociacaoReposit
     app.state.chaves_publicas = chaves_publicas
     app.state.emissor = emissor
     app.state.audiencia = audiencia
+    app.state.servico = Negociacoes(repositorio, event_bus, clock)
+    # shortcut: leilao_iniciado entra com a abertura do leilão
+    for topico in ("modo_negociacao_definido", "pedido_atualizado"):
+        event_bus.subscribe(topico, app.state.servico.handler(topico))
     configurar_http(app)
     return app
 
