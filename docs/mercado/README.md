@@ -14,7 +14,7 @@ O serviço acompanha, por produto, a oferta disponível e a demanda aberta do po
 | Alinhamento com Pedidos | Fechado em 19/11 (INT-MRC-02): a ESP-PED-001 não muda |
 | Alinhamento com Fornecimento e Produtos | Fechado em 25/11 (INT-MRC-05): o contrato de eventos v2.5 (23/11) registra o Mercado como consumidor dos 5 eventos de produto e oferta; o documento de requisitos (v0.13) e a ESP-PRD-001 (v2.3) foram alinhados no PR #45 e a issue #44 de `davicalvarenga/Sistema-MicServ-SD` foi fechada |
 | Alinhamento com Compra e Demanda | Fechado em 26/11 (INT-MRC-04): as issues [#1](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/1) e [#2](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/2) foram respondidas, com todos os pedidos aceitos. A demanda não é editável na v1 e não haverá evento de expiração |
-| Alinhamento com Negociação | Fluxo fechado em 19/11 (INT-MRC-01, ESP-NEG-001 v1.2). Pedidos novos: [issue #11](https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/issues/11) de 25/11 (rateio, incremento, D40 e participação no recálculo, INT-MRC-11) e compra imediata (INT-MRC-10), **aguardando o Caio** |
+| Alinhamento com Negociação | Fluxo fechado em 19/11 (INT-MRC-01, ESP-NEG-001 v1.2). Compra imediata (INT-MRC-10) e [issue #11](https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/issues/11) (rateio, incremento, D40 e participação no recálculo, INT-MRC-11) fechadas em 25/11 pela ESP-NEG-001 v1.3 e v1.4 |
 | Alinhamento com Autenticação | Fechado em 25/11 (INT-MRC-07): a resposta do Identity na issue #4 (23/11) já está no §7.1 da ESP; o formato de erro do Mercado continua o do §10 |
 | Status Report | Decisões marcadas com "Status Report: sim" na seção 13 da ESP |
 
@@ -89,7 +89,7 @@ Segue o diagrama: o Mercado inicia os leilões e publica `modo_negociacao_defini
 
 | Grupo | Pendência |
 |---|---|
-| Negociação | Código consumindo `leilao_iniciado` e `modo_negociacao_definido` e teste com o Mercado (prazo: 30/11); na ESP-NEG-001, fechar a INT-NEG-12 (issue #7) e atualizar as referências; [issue #11](https://github.com/brunnoalexcson/portal-b2b-mercado-negociacao-pedidos/issues/11) (INT-MRC-11); compra imediata (INT-MRC-10) |
+| Negociação | Código consumindo `leilao_iniciado` e `modo_negociacao_definido` e teste com o Mercado (prazo: 30/11); na ESP-NEG-001, atualizar as referências |
 | Infra | Aguardando resposta da [issue #6](https://github.com/Printf-PedroCardoso/portal-b2b-kit-infra/issues/6), aberta em 26/11 (INT-MRC-03): Mercado × Infra: tópicos que o Mercado consome, consumidores no CONTRACTS.md e tabelas de exemplo do schema mercado |
 | Compra e Demanda | Implementar o combinado nas issues [#1](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/1) e [#2](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/2), respondidas em 26/11 (schemas, exemplos e `docs/03-eventos-e-integracoes.md`). O cancelamento das demandas de produto excluído depende do nome do tópico do Fornecimento |
 | Banco de Dados | Validar as tabelas do §6.1 e os tipos decimais (o DR-BD-002 não tem tabelas do Mercado); responder pelo Teams (INT-MRC-06) |
