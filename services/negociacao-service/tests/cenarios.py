@@ -41,6 +41,11 @@ DEM_Y = "36000000-0000-4000-8000-000000000002"
 
 L1 = "31000000-0000-4000-8000-000000000001"
 D1 = "31000000-0000-4000-8000-000000000002"
+L2 = "31000000-0000-4000-8000-000000000002"
+L3 = "31000000-0000-4000-8000-000000000003"
+L4 = "31000000-0000-4000-8000-000000000004"
+
+FORNECEDOR_DA_OFERTA = {OF_A: FORN_A, OF_B: FORN_B, OF_D: FORN_C, OF_E: FORN_C}
 
 CORR_L1 = "teste-neg-01"
 CORR_D1 = "teste-neg-02"
@@ -75,6 +80,45 @@ def schema(topico: str) -> dict:
 def evento_d1(**alteracoes_payload) -> dict:
     """Envelope de `modo_negociacao_definido` da direta D1 lido do exemplo oficial."""
     envelope = copy.deepcopy(exemplo("modo_negociacao_definido"))
+    envelope["payload"].update(alteracoes_payload)
+    return envelope
+
+
+def evento_l1(**alteracoes_payload) -> dict:
+    """Envelope de `leilao_iniciado` do leilão L1 lido do exemplo oficial."""
+    envelope = copy.deepcopy(exemplo("leilao_iniciado"))
+    envelope["payload"].update(alteracoes_payload)
+    return envelope
+
+
+def item_leilao(fornecimento_id: str, quantidade, preco_unitario, valor_item, participacao,
+                fornecedor_id: str | None = None) -> dict:
+    return {
+        "fornecimentoId": fornecimento_id,
+        "fornecedorId": fornecedor_id or FORNECEDOR_DA_OFERTA[fornecimento_id],
+        "quantidade": D(str(quantidade)),
+        "precoUnitario": D(str(preco_unitario)),
+        "valorItem": D(str(valor_item)),
+        "participacao": D(str(participacao)),
+        "origem": {"cidade": "Rio Verde", "uf": "GO"},
+    }
+
+
+def evento_leilao(n: int = 1, itens: list[dict] | None = None, preco_inicial=None, incremento_minimo=None,
+                  **alteracoes_payload) -> dict:
+    """Monta o `leilao_iniciado` de `Ln` conforme o §8.0."""
+    negociacao_id = f"31000000-0000-4000-8000-00000000000{n}"
+    envelope = evento_l1(negociacaoId=negociacao_id)
+    envelope["eventId"] = str(uuid4())
+    envelope["aggregateId"] = negociacao_id
+    if itens is not None:
+        envelope["payload"]["itens"] = itens
+        if itens and "quantidadeTotal" not in alteracoes_payload:
+            envelope["payload"]["quantidadeTotal"] = sum((D(str(i["quantidade"])) for i in itens), D("0.00"))
+    if preco_inicial is not None:
+        envelope["payload"]["precoInicial"] = D(str(preco_inicial))
+    if incremento_minimo is not None:
+        envelope["payload"]["incrementoMinimo"] = D(str(incremento_minimo))
     envelope["payload"].update(alteracoes_payload)
     return envelope
 
@@ -190,6 +234,24 @@ class Ambiente:
     def abrir_d1(self, **alteracoes_payload) -> dict:
         mensagem = evento_d1(**alteracoes_payload)
         self.entregar("modo_negociacao_definido", mensagem)
+        return mensagem
+
+    def abrir_l1(self, **alteracoes_payload) -> dict:
+        mensagem = evento_l1(**alteracoes_payload)
+        self.entregar("leilao_iniciado", mensagem)
+        return mensagem
+
+    def abrir_leilao(self, n: int, itens: list[dict], preco_inicial, incremento_minimo,
+                     **alteracoes_payload) -> dict:
+        mensagem = evento_leilao(n, itens, preco_inicial, incremento_minimo, **alteracoes_payload)
+        self.entregar("leilao_iniciado", mensagem)
+        return mensagem
+
+    def abrir_l1_aberto(self) -> dict:
+        mensagem = self.abrir_l1()
+        self.em("12:01:00")
+        self.confirmar_reserva(OF_A, PT_A, L1, correlation_id=CORR_L1)
+        self.confirmar_reserva(OF_B, PT_B, L1, correlation_id=CORR_L1)
         return mensagem
 
     def confirmar_reserva(self, fornecimento_id: str = OF_B, pedido_id: str = PT_D, negociacao_id: str = D1,

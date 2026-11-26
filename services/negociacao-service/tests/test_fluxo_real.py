@@ -2,7 +2,7 @@
 import asyncio
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import uuid4
 
@@ -24,8 +24,12 @@ D = Decimal
 
 COMPRADOR = f"comprador-a-{SUFIXO}"
 FORNECEDOR = f"fornecedor-x-{SUFIXO}"
+FORNECEDOR_A = f"fornecedor-a-{SUFIXO}"
+FORNECEDOR_B = f"fornecedor-b-{SUFIXO}"
 PRODUTO = f"milho-{SUFIXO}"
 OFERTA = f"oferta-x-{SUFIXO}"
+OFERTA_A = f"oferta-a-{SUFIXO}"
+OFERTA_B = f"oferta-b-{SUFIXO}"
 DEMANDA = f"demanda-a-{SUFIXO}"
 
 
@@ -73,16 +77,65 @@ def modo_direta(negociacao_id: str, compra_imediata: bool) -> dict:
     })
 
 
-def confirmacao_reserva(negociacao_id: str, pedido_id: str, event_id: str | None = None) -> dict:
+def confirmacao_reserva(negociacao_id: str, pedido_id: str, event_id: str | None = None,
+                        fornecimento_id: str = OFERTA) -> dict:
     return evento("pedido_atualizado", "pedidos-service", pedido_id, {
         "pedidoId": pedido_id,
         "negociacaoId": negociacao_id,
-        "fornecimentoId": OFERTA,
+        "fornecimentoId": fornecimento_id,
         "status": "CRIADO",
         "statusAnterior": "CRIADO",
         "reservaSituacao": "CONFIRMADA",
         "versao": 2,
     }, event_id=event_id)
+
+
+def recusa_reserva(negociacao_id: str, pedido_id: str, fornecimento_id: str = OFERTA) -> dict:
+    return evento("pedido_atualizado", "pedidos-service", pedido_id, {
+        "pedidoId": pedido_id,
+        "negociacaoId": negociacao_id,
+        "fornecimentoId": fornecimento_id,
+        "status": "CANCELADO",
+        "statusAnterior": "CRIADO",
+        "reservaSituacao": "RECUSADA",
+        "versao": 2,
+    })
+
+
+def leilao_iniciado(negociacao_id: str) -> dict:
+    agora = datetime.now(timezone.utc)
+    return evento("leilao_iniciado", "mercado-service", negociacao_id, {
+        "negociacaoId": negociacao_id,
+        "sugestaoId": str(uuid4()),
+        "produtoId": PRODUTO,
+        "unidade": "TON",
+        "quantidadeTotal": D("20.00"),
+        "precoInicial": D("2550.00"),
+        "incrementoMinimo": D("25.50"),
+        "incrementoMinimoPercentual": D("1.00"),
+        "itens": [
+            {
+                "fornecimentoId": OFERTA_A,
+                "fornecedorId": FORNECEDOR_A,
+                "quantidade": D("5.00"),
+                "precoUnitario": D("120.00"),
+                "valorItem": D("600.00"),
+                "participacao": D("0.2353"),
+                "origem": {"cidade": "Rio Verde", "uf": "GO"},
+            },
+            {
+                "fornecimentoId": OFERTA_B,
+                "fornecedorId": FORNECEDOR_B,
+                "quantidade": D("15.00"),
+                "precoUnitario": D("130.00"),
+                "valorItem": D("1950.00"),
+                "participacao": D("0.7647"),
+                "origem": {"cidade": "Jataí", "uf": "GO"},
+            },
+        ],
+        "iniciaEm": formato_json(agora),
+        "encerraEm": formato_json(agora + timedelta(hours=2)),
+    })
 
 
 async def _publicar(mensagens):
@@ -101,7 +154,7 @@ def publicar(*mensagens):
     asyncio.run(_publicar(mensagens))
 
 
-async def _ler(topico: str, filtro, limite: float = 30.0, esperar_extras: float = 0.0):
+async def _ler(topico: str, filtro, limite: float = 30.0, esperar_extras: float = 0.0, minimo: int = 1):
     consumidor = AIOKafkaConsumer(topico, bootstrap_servers=KAFKA, group_id=None, auto_offset_reset="earliest")
     await consumidor.start()
     encontrados = []
@@ -115,20 +168,20 @@ async def _ler(topico: str, filtro, limite: float = 30.0, esperar_extras: float 
                     valor = loads(mensagem.value.decode("utf-8"))
                     if filtro(valor):
                         encontrados.append((mensagem.key.decode("utf-8"), valor))
-            if encontrados:
+            if len(encontrados) >= minimo:
                 if esperar_extras <= 0:
                     return encontrados
                 if prazo_extra is None:
                     prazo_extra = asyncio.get_running_loop().time() + esperar_extras
                 elif asyncio.get_running_loop().time() >= prazo_extra:
                     return encontrados
-        raise AssertionError(f"Nenhuma mensagem encontrada em {topico} em {limite}s")
+        raise AssertionError(f"Esperadas >= {minimo} mensagens em {topico} em {limite}s, lidas {len(encontrados)}")
     finally:
         await consumidor.stop()
 
 
-def ler(topico: str, filtro, limite: float = 30.0, esperar_extras: float = 0.0):
-    return asyncio.run(_ler(topico, filtro, limite, esperar_extras))
+def ler(topico: str, filtro, limite: float = 30.0, esperar_extras: float = 0.0, minimo: int = 1):
+    return asyncio.run(_ler(topico, filtro, limite, esperar_extras, minimo))
 
 
 def token(empresa: str, escopo: str = "BUYER") -> str:
@@ -327,3 +380,89 @@ def test_contraproposta_idempotente_e_aceite_na_direta():
             (negociacao_id,),
         ).fetchone()[0]
         assert total_propostas == 2
+
+
+def test_abertura_recalculo_de_lote_e_deserto_no_leilao():
+    leilao_id = str(uuid4())
+    jwt_comprador = token(COMPRADOR, "BUYER")
+    publicar(leilao_iniciado(leilao_id))
+
+    detalhe_inicial = esperar(
+        lambda: loads(r.text) if (r := get_negociacao(leilao_id, jwt_comprador)).status_code == 200 else None,
+    )
+    assert detalhe_inicial["status"] == "AGUARDANDO_RESERVAS"
+    assert detalhe_inicial["acoesPermitidas"] == []
+
+    solicitados = ler(
+        "pedido_temporario_solicitado", lambda v: v.get("aggregateId") == leilao_id, minimo=2,
+    )
+    assert len(solicitados) == 2
+    (chave_a, msg_a), (chave_b, msg_b) = solicitados
+    assert chave_a == chave_b == leilao_id
+    assert msg_a["payload"] == {
+        "negociacaoId": leilao_id,
+        "tipo": "LEILAO",
+        "fornecimentoId": OFERTA_A,
+        "fornecedorId": FORNECEDOR_A,
+        "produtoId": PRODUTO,
+        "quantidade": D("5.00"),
+        "precoUnitario": D("120.00"),
+    }
+    assert msg_b["payload"] == {
+        "negociacaoId": leilao_id,
+        "tipo": "LEILAO",
+        "fornecimentoId": OFERTA_B,
+        "fornecedorId": FORNECEDOR_B,
+        "produtoId": PRODUTO,
+        "quantidade": D("15.00"),
+        "precoUnitario": D("130.00"),
+    }
+
+    publicar(
+        confirmacao_reserva(leilao_id, str(uuid4()), fornecimento_id=OFERTA_A),
+        recusa_reserva(leilao_id, str(uuid4()), fornecimento_id=OFERTA_B),
+    )
+    recalculado = esperar(
+        lambda: d if (d := loads(get_negociacao(leilao_id, jwt_comprador).text))["status"] == "ABERTO" else None,
+    )
+    assert recalculado["quantidadeTotal"] == D("5.00")
+    assert recalculado["precoInicial"] == D("600.00")
+    assert recalculado["incrementoMinimo"] == D("6.00")
+    assert recalculado["acoesPermitidas"] == ["DAR_LANCE"]
+    assert recalculado["ofertas"][0]["fornecimentoId"] == OFERTA_A
+    assert recalculado["ofertas"][0]["participacao"] == D("1.0000")
+    assert recalculado["ofertas"][0]["situacao"] == "CONFIRMADA"
+    assert recalculado["ofertas"][1]["fornecimentoId"] == OFERTA_B
+    assert recalculado["ofertas"][1]["situacao"] == "RECUSADA"
+
+    # Segundo leilão com as duas ofertas recusadas -> DESERTO e exatamente 1 negociacao_fechada.
+    deserto_id = str(uuid4())
+    publicar(leilao_iniciado(deserto_id))
+    esperar(lambda: get_negociacao(deserto_id, jwt_comprador).status_code == 200)
+    publicar(
+        recusa_reserva(deserto_id, str(uuid4()), fornecimento_id=OFERTA_A),
+        recusa_reserva(deserto_id, str(uuid4()), fornecimento_id=OFERTA_B),
+    )
+
+    deserto = esperar(
+        lambda: d if (d := loads(get_negociacao(deserto_id, jwt_comprador).text))["status"] == "DESERTO" else None,
+    )
+    assert deserto["compradorId"] is None
+    assert deserto["encerradoEm"] is not None
+    assert deserto["acoesPermitidas"] == []
+
+    fechamentos = ler(
+        "negociacao_fechada", lambda v: v.get("aggregateId") == deserto_id, esperar_extras=1.5,
+    )
+    assert len(fechamentos) == 1
+    chave_fechada, fechada = fechamentos[0]
+    assert chave_fechada == deserto_id
+    assert fechada["payload"] == {
+        "negociacaoId": deserto_id,
+        "tipo": "LEILAO",
+        "status": "DESERTO",
+        "compradorId": None,
+        "demandaId": None,
+        "produtoId": PRODUTO,
+        "alocacoes": [],
+    }
