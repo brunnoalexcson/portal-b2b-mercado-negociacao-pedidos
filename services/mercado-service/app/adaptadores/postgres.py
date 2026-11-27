@@ -34,6 +34,7 @@ CANCELAMENTO = [("demandaId", "demanda_id"), ("compradorId", "comprador_id"), ("
                 ("recebidoEm", "recebido_em")]
 SUGESTAO = [("sugestaoId", "sugestao_id"), ("produtoId", "produto_id"), ("situacao", "situacao"),
             ("excessoDemanda", "excesso_demanda"), ("janelaEncerraEm", "janela_encerra_em"),
+            ("duracaoLeilaoHoras", "duracao_leilao_horas"),
             ("negociacaoId", "negociacao_id"), ("correlationId", "correlation_id"), ("abertaEm", "aberta_em"),
             ("encerradaEm", "encerrada_em")]
 ACEITE = [("sugestaoId", "sugestao_id"), ("fornecimentoId", "fornecimento_id"), ("fornecedorId", "fornecedor_id"),

@@ -1,6 +1,6 @@
 # Mercado (Matching Engine) do Portal B2B
 
-Implementação da [ESP-MRC-001 v0.11](../../docs/mercado/requisitos.md). O serviço mantém cópias locais de produtos, ofertas e demandas, calcula o balanço por produto e define o modo de negociação. Quando o comprador pede, abre uma negociação direta; quando a demanda supera a oferta, forma um leilão em lote a partir da sugestão aceita pelos fornecedores. Publica `modo_negociacao_definido`, `leilao_iniciado` e `mercado.dlt`.
+Implementação da [ESP-MRC-001 v0.12](../../docs/mercado/requisitos.md). O serviço mantém cópias locais de produtos, ofertas e demandas, calcula o balanço por produto e define o modo de negociação. Quando o comprador pede, abre uma negociação direta; quando a demanda supera a oferta, forma um leilão em lote a partir da sugestão aceita pelos fornecedores. Publica `modo_negociacao_definido`, `leilao_iniciado` e `mercado.dlt`.
 
 ## Estrutura
 
@@ -25,7 +25,7 @@ A suíte de aceitação usa dublês das portas e roda sem infraestrutura. Os tes
 wsl sh -c 'docker build --target test --build-context contratos=docs/mercado/contratos -t mercado-service:test services/mercado-service'
 ```
 
-Resultado esperado: `201 passed, 4 skipped` (os 4 testes de `tests/test_fluxo_real.py` só rodam dentro da demonstração).
+Resultado esperado: `205 passed, 4 skipped` (os 4 testes de `tests/test_fluxo_real.py` só rodam dentro da demonstração).
 
 ## Demonstração local
 
@@ -87,18 +87,18 @@ O script publica no Kafka 1 produto, a oferta X (8.00 × 60.00), a oferta Y (7.5
 
 **5. Vitrine** (Comprador A): `GET /api/v1/mercado/produtos/{produtoId}/ofertas` com `demandaId` = demanda A. Mostre a ordem pelo menor preço (oferta Y a 7.50, depois oferta X a 8.00) e `apta` = `true` nas duas, porque as duas estão abaixo do preço máximo de 9.00.
 
-**6. Sugestão de leilão** (troque para o **Fornecedor X**): `GET /api/v1/mercado/sugestoes-leilao`. Mostre a sugestão `ABERTA` com `excessoDemanda` 30.00, `fornecedoresNoLote` 0 e `duracaoLeilaoHoras` 24. Um comprador recebe `403 ACESSO_NEGADO` nessa rota.
+**6. Sugestão de leilão** (troque para o **Fornecedor X**): `GET /api/v1/mercado/sugestoes-leilao`. Mostre a sugestão `ABERTA` com `excessoDemanda` 30.00, `fornecedoresNoLote` 0 e `duracaoLeilaoHoras` 24 (o padrão; o primeiro fornecedor que aceitar pode escolher outra duração). Um comprador recebe `403 ACESSO_NEGADO` nessa rota.
 
 **7. Direta com compra imediata** (troque para o **Comprador A**): `POST /api/v1/mercado/negociacoes` com o corpo "Direta" impresso pelo script (demanda A, oferta Y, 10, `compraImediata` `true`). Resposta `201` com `modo` `VENDA_DIRETA`, `compraImediata` `true`, `valorReferencia` 75.00 e o cabeçalho `Location`. A demanda total cai para 120.00 e a sugestão continua aberta.
 
 **8. Evento no Console:** em **Topics** → `modo_negociacao_definido`, abra a mensagem mais recente. A chave é o `negociacaoId`, o `source` é `mercado-service`, e o payload traz `compraImediata` `true` e `demandas[0]` com o destino da demanda A. Mostre também que os tópicos consumidos (`produto_cadastrado`, `fornecimento_criado`, `demanda_criada`) têm as mensagens publicadas pelo script.
 
 **9. Aceites fechando o lote:**
-- Com o **Fornecedor X**: `POST /api/v1/mercado/sugestoes-leilao/{sugestaoId}/aceites` com o corpo "Aceite (Fornecedor X)". Resposta `201` com `situacao` `EM_FORMACAO`, `quantidadeNoLote` 60.00 e `janelaEncerraEm` uma hora depois.
+- Com o **Fornecedor X**: `POST /api/v1/mercado/sugestoes-leilao/{sugestaoId}/aceites` com o corpo "Aceite (Fornecedor X)". Resposta `201` com `situacao` `EM_FORMACAO`, `quantidadeNoLote` 60.00, `janelaEncerraEm` uma hora depois e `duracaoLeilaoHoras` 48: o primeiro fornecedor escolheu um leilão de 48 h (sem o campo, vale o padrão de 24 h; DG-70).
 - Com o **Fornecedor Y**: a mesma rota com o corpo "Aceite (Fornecedor Y)". Resposta `201` com `situacao` `CONVERTIDA` e o `negociacaoId` do leilão. Os dois fornecedores elegíveis estão no lote, por isso ele fecha na hora (RN-21).
 - Opcional: `GET /api/v1/mercado/negociacoes/{negociacaoId}` mostra o leilão com `precoInicial` 780.00, `incrementoMinimo` 7.80 e as participações 0.6154 e 0.3846.
 
-**10. Leilão no Console:** em `modo_negociacao_definido` aparece um segundo evento, com `modo` `LEILAO_DIRETO` e `demandas` vazio. Em `leilao_iniciado`, mostre `precoInicial` 780.00, `incrementoMinimo` 7.80, os dois itens com `participacao`, `iniciaEm` e `encerraEm` 24 h depois. Os dois eventos do leilão usam a mesma chave (`negociacaoId`).
+**10. Leilão no Console:** em `modo_negociacao_definido` aparece um segundo evento, com `modo` `LEILAO_DIRETO` e `demandas` vazio. Em `leilao_iniciado`, mostre `precoInicial` 780.00, `incrementoMinimo` 7.80, os dois itens com `participacao`, `iniciaEm` e `encerraEm` 48 h depois, a duração escolhida pelo Fornecedor X. Os dois eventos do leilão usam a mesma chave (`negociacaoId`).
 
 Para repetir a apresentação, basta rodar o passo 2 de novo: cada execução cria um cenário com IDs próprios. Para encerrar, use o `stop` ou o `down -v` da seção anterior.
 

@@ -23,6 +23,7 @@ PREFIXO = "/api/v1/mercado"
 ID_HTTP = re.compile(r"[A-Za-z0-9._-]{1,64}")
 CHAVE_HTTP = re.compile(r"[A-Za-z0-9._-]{1,128}")
 INTEIRO = re.compile(r"[0-9]{1,9}")   # page e size: até 9 dígitos (§7.2)
+MAX_DURACAO_HORAS = 999999   # DG-70: sem máximo de negócio; o limite só evita estourar a data (≈ 114 anos)
 COMPRADOR, FORNECEDOR = ("BUYER",), ("SUPPLIER",)
 AMBOS = ("BUYER", "SUPPLIER")
 
@@ -214,6 +215,13 @@ def quantidade(valor):
         _invalida()
 
 
+def duracao_leilao(valor) -> int | None:
+    """DG-70: inteiro de 1 a MAX_DURACAO_HORAS (`null` é inválido); o campo ausente usa a duração padrão."""
+    if isinstance(valor, bool) or not isinstance(valor, int) or not 1 <= valor <= MAX_DURACAO_HORAS:
+        _invalida()
+    return valor
+
+
 def idempotencia(ator: Ator, metodo: str, caminho: str, chave: str | None, corpo: dict) -> Idempotencia | None:
     if chave is None:
         return None
@@ -342,16 +350,19 @@ def _rotas() -> APIRouter:
         return await executar(request, "/api/v1/mercado/sugestoes-leilao", FORNECEDOR, acao)
 
     @rota.post("/sugestoes-leilao/{sugestaoId}/aceites", status_code=201, openapi_extra=corpo_openapi(
-        ("fornecimentoId", "quantidade"), {"fornecimentoId": id_schema, "quantidade": qtd_schema}))
+        ("fornecimentoId", "quantidade"), {"fornecimentoId": id_schema, "quantidade": qtd_schema,
+                                           "duracaoLeilaoHoras": {"type": "integer", "minimum": 1,
+                                                                  "maximum": MAX_DURACAO_HORAS}}))
     async def aceitar(request: Request, sugestaoId: str):
         def acao(ctx, ator, bruto):
             sugestao = validar_uuid(sugestaoId)
             chave = chave_idempotencia(request)
-            dados = ler_corpo(bruto, ("fornecimentoId", "quantidade"))
+            dados = ler_corpo(bruto, ("fornecimentoId", "quantidade"), ("duracaoLeilaoHoras",))
             oferta_id, qtd = validar_id(dados["fornecimentoId"]), quantidade(dados["quantidade"])
+            duracao = duracao_leilao(dados["duracaoLeilaoHoras"]) if "duracaoLeilaoHoras" in dados else None
             caminho = f"{PREFIXO}/sugestoes-leilao/{sugestao}/aceites"
             resposta = ctx.mercado.aceitar(ator.empresa, sugestao, oferta_id, qtd, request.state.correlacao,
-                                           idempotencia(ator, "POST", caminho, chave, dados))
+                                           idempotencia(ator, "POST", caminho, chave, dados), duracao)
             return json_response(resposta, 201)
         return await executar(request, "/api/v1/mercado/sugestoes-leilao/{sugestaoId}/aceites", FORNECEDOR,
                               acao, com_corpo=True)

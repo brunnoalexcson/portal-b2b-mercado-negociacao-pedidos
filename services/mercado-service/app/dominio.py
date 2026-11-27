@@ -284,7 +284,8 @@ class Mercado:
             if dispara:
                 repo.salvar_sugestao({
                     "sugestaoId": str(uuid4()), "produtoId": produto_id, "situacao": ABERTA,
-                    "excessoDemanda": excesso, "janelaEncerraEm": None, "negociacaoId": None,
+                    "excessoDemanda": excesso, "janelaEncerraEm": None, "duracaoLeilaoHoras": None,
+                    "negociacaoId": None,
                     "correlationId": None, "abertaEm": op.agora, "encerradaEm": None,
                 })
             return
@@ -320,7 +321,7 @@ class Mercado:
             "precoInicial": preco_inicial,
             "incrementoMinimo": incremento_minimo(preco_inicial, self.config.leilao_incremento_minimo_percentual),
             "sugestaoId": sugestao["sugestaoId"], "iniciaEm": op.agora,
-            "encerraEm": op.agora + timedelta(hours=self.config.leilao_duracao_horas),
+            "encerraEm": op.agora + timedelta(hours=self._duracao_leilao(sugestao)),
             "definidaEm": op.agora, "encerradaEm": None, "correlationId": correlacao,
         }
         repo.inserir_negociacao(negociacao)
@@ -487,7 +488,7 @@ class Mercado:
             return
         repo.remover_aceite(sugestao["sugestaoId"], fornecimento_id)
         if not repo.listar_aceites(sugestao["sugestaoId"]):
-            sugestao.update(situacao=ABERTA, janelaEncerraEm=None, correlationId=None)
+            sugestao.update(situacao=ABERTA, janelaEncerraEm=None, duracaoLeilaoHoras=None, correlationId=None)
             repo.salvar_sugestao(sugestao)
 
     def _estoque(self, op: _Operacao, p: dict) -> str:
@@ -732,6 +733,10 @@ class Mercado:
             "contextoProduto": contexto, "agora": agora,
         }
 
+    def _duracao_leilao(self, sugestao: dict) -> int:
+        """DG-70: a duração informada no primeiro aceite; sem ela, `LEILAO_DURACAO_HORAS`."""
+        return sugestao.get("duracaoLeilaoHoras") or self.config.leilao_duracao_horas
+
     def _projecao_sugestao(self, sugestao: dict, empresa: str, agora: datetime) -> dict:
         aceites = self._aceites_ordenados(sugestao["sugestaoId"])
         produto = self.repo.obter_produto(sugestao["produtoId"])
@@ -743,7 +748,7 @@ class Mercado:
             "quantidadeNoLote": q2(sum((aceite["quantidade"] for aceite in aceites), ZERO)),
             "fornecedoresNoLote": len({aceite["fornecedorId"] for aceite in aceites}),
             "janelaEncerraEm": sugestao["janelaEncerraEm"],
-            "duracaoLeilaoHoras": self.config.leilao_duracao_horas,
+            "duracaoLeilaoHoras": self._duracao_leilao(sugestao),
             "minhaParticipacao": ({"fornecimentoId": meus[0]["fornecimentoId"], "quantidade": q2(meus[0]["quantidade"])}
                                   if meus else None),
             "negociacaoId": sugestao["negociacaoId"], "agora": agora,
@@ -923,7 +928,8 @@ class Mercado:
         return sugestao["situacao"] == EM_FORMACAO and agora < sugestao["janelaEncerraEm"]
 
     def aceitar(self, empresa: str, sugestao_id: str, fornecimento_id: str, quantidade: Decimal,
-                correlacao: str, idempotencia: Idempotencia | None = None) -> dict:
+                correlacao: str, idempotencia: Idempotencia | None = None,
+                duracao_horas: int | None = None) -> dict:
         repo = self.repo
         with repo.transacao():
             op = _Operacao(self.agora(), correlacao)
@@ -954,7 +960,8 @@ class Mercado:
             repo.salvar_aceite({"sugestaoId": sugestao_id, "fornecimentoId": fornecimento_id,
                                 "fornecedorId": empresa, "quantidade": quantidade, "aceitoEm": op.agora})
             if sugestao["situacao"] == ABERTA:
-                sugestao.update(situacao=EM_FORMACAO, correlationId=correlacao,
+                # DG-70: só o aceite que abre a janela define a duração do leilão; nos seguintes, ela é ignorada.
+                sugestao.update(situacao=EM_FORMACAO, correlationId=correlacao, duracaoLeilaoHoras=duracao_horas,
                                 janelaEncerraEm=op.agora + timedelta(minutes=self.config.leilao_janela_adesao_minutos))
                 repo.salvar_sugestao(sugestao)
             self._recalcular(op, produto_id)
@@ -1012,7 +1019,7 @@ class Mercado:
             sugestao, _ = self._preparar_mudanca(op, empresa, sugestao_id, fornecimento_id)
             repo.remover_aceite(sugestao_id, fornecimento_id)
             if not repo.listar_aceites(sugestao_id):
-                sugestao.update(situacao=ABERTA, janelaEncerraEm=None, correlationId=None)
+                sugestao.update(situacao=ABERTA, janelaEncerraEm=None, duracaoLeilaoHoras=None, correlationId=None)
                 repo.salvar_sugestao(sugestao)
             self._recalcular(op, sugestao["produtoId"])
             self._publicar(op)

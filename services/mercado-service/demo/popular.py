@@ -124,7 +124,8 @@ def main():
     print(f"\n{linha}\nCORPOS PARA O /docs\n{linha}")
     print(f"Direta (Comprador A): {{\"demandaId\": \"{DEMANDA_A}\", \"fornecimentoId\": \"{OFERTA_Y}\", "
           f"\"quantidade\": 10, \"compraImediata\": true}}")
-    print(f"Aceite (Fornecedor X): {{\"fornecimentoId\": \"{OFERTA_X}\", \"quantidade\": 60}}")
+    print(f"Aceite (Fornecedor X): {{\"fornecimentoId\": \"{OFERTA_X}\", \"quantidade\": 60, "
+          f"\"duracaoLeilaoHoras\": 48}}")
     print(f"Aceite (Fornecedor Y): {{\"fornecimentoId\": \"{OFERTA_Y}\", \"quantidade\": 40}}")
     print(f"\n{linha}\nTOKENS (válidos por 2 h; cole no Authorize do /docs, sem a palavra Bearer)\n{linha}")
     for nome, (empresa, escopo) in EMPRESAS.items():

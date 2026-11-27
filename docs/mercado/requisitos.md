@@ -5,11 +5,11 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-MRC-001 |
-| Versão | 0.11 |
+| Versão | 0.12 |
 | Status | Rascunho |
 | Serviço / Bounded context | `mercado-service` (microsserviço 5 do Portal B2B Distribuído): Mercado / Matching Engine. Porta `8105`, rotas `/api/v1/mercado`, schema PostgreSQL `mercado`, role `svc_mercado` |
 | Autores (PO / Dev / QA) | PO e Dev: Brunno Alexcson (grupo Mercado, Negociação/Leilão e Pedidos). QA: Grupo de Teste e Qualidade (revisão no gate G1) |
-| Data | 2026-11-26 |
+| Data | 2026-11-27 |
 | Documentos relacionados | Diagrama "Arquitetura do Portal B2B Distribuído" (bloco 5); ESP-PED-001 v2.2 (`docs/pedidos/requisitos.md`); ESP-NEG-001 v1.2 (`docs/negociacao/requisitos.md`); contratos de eventos em `docs/mercado/contratos/`; kit de Infraestrutura (`CONTRACTS.md`, `ORIENTACOES-ARQUITETURA-GRUPOS.md`); contrato de eventos v2.5 do Fornecimento; contratos do grupo de Compra e Demanda (`comum/contratos/`); Identity-Service; modelo ERS-LLM v1.2 do QA |
 
 ## 1. Diretivas para a LLM geradora
@@ -113,7 +113,7 @@ Passos do fluxo principal: (1) o Fornecimento publica as ofertas; (2) o comprado
 | Fornecedor elegível | Para uma sugestão: empresa dona de oferta negociável do produto com disponível livre > 0, que não tem item em leilão com `situacao = "ABERTA"` do mesmo produto. |
 | Janela de adesão | Intervalo entre o primeiro aceite da sugestão e `janelaEncerraEm` = instante do primeiro aceite + `LEILAO_JANELA_ADESAO_MINUTOS`. |
 | T1 | Instante em que o lote fecha e o leilão é publicado (RN-21). A partir daí a Negociação pede as reservas e libera os lances quando todas estiverem confirmadas (DG-51). |
-| T2 | `T1 + LEILAO_DURACAO_HORAS`. Fim dos lances, conduzido pela Negociação. |
+| T2 | T1 + duração do leilão: a escolhida pelo fornecedor no primeiro aceite (`duracaoLeilaoHoras`) ou, sem ela, `LEILAO_DURACAO_HORAS` (24 h por padrão) (RN-18, DG-70). Fim dos lances, conduzido pela Negociação. |
 | Lote | Conjunto dos itens do leilão (um por aceite em T1). `quantidadeTotal` = soma das quantidades. |
 | Preço inicial | `precoInicial` = Σ (`quantidade` × `precoUnitario`) dos itens, com 2 casas. Valor mínimo do primeiro lance. Se um item sair por reserva recusada, a Negociação recalcula pela mesma regra (DG-51). |
 | Incremento mínimo | `precoInicial × LEILAO_INCREMENTO_MINIMO_PERCENTUAL / 100`, com 2 casas, nunca menor que 0.01. |
@@ -153,7 +153,7 @@ services/mercado-service/
 │       └── jwks.py          # ChavesPublicas real (PyJWKClient, cache de 1 h)
 ├── migracoes/
 │   ├── env.py
-│   └── versions/0001_mercado.py
+│   └── versions/0001_mercado.py, 0002_duracao_leilao.py
 ├── tests/                   # suíte de aceitação (§8) com dublês das portas, testes do fluxo real no compose.demo.yml e demo_identity.py (emissor de tokens de teste)
 ├── demo/                    # init.sql (roles svc_mercado e portal_ddl, schema mercado) e nginx.conf (gateway da demonstração)
 ├── alembic.ini
@@ -283,7 +283,7 @@ Comportamento dos adaptadores reais (não usados pela suíte de aceitação em m
 - **JWKS (`jwks.py`):** `jwt.PyJWKClient(JWKS_URL, cache_keys=True, lifespan=3600, timeout=2)`. Falha de rede lança exceção (→ 503); `kid` ausente no conjunto devolve `None` (→ 401).
 - **Logs:** JSON em `stdout` com `timestamp`, `level`, `service` (`mercado-service`), `correlationId`, `message` e, quando conhecidos, `produtoId`, `demandaId`, `negociacaoId` e `eventId` (mesmas chaves da biblioteca comum do kit). Sem `print()`. Nunca registrar o token.
 - **Métricas (`/metrics`):** `mercado_http_requisicoes_total` (`rota`, `metodo`, `status`), `mercado_http_latencia_segundos` (histograma, `rota`, `metodo`), `mercado_eventos_consumidos_total` (`topico`, `resultado` ∈ `aplicado`, `duplicado`, `ignorado`, `dlt`), `mercado_outbox_pendentes` e `mercado_sugestoes_ativas`. IDs e tokens nunca são rótulos.
-- **Migração (`migracoes/versions/0001_mercado.py`):** roda com `MIGRATION_DATABASE_URL` (role `portal_ddl`). Começa com `DROP TABLE IF EXISTS` de `mercado.match`, `mercado.modo_negociacao` e `mercado.processed_events`, as tabelas de exemplo que o `database/01-init.sql` do kit cria no schema (DG-56). Depois cria, no schema `mercado`, as tabelas do §6.1 (`produto`, `oferta`, `demanda`, `demanda_modelo`, `sugestao_leilao`, `aceite_leilao`, `negociacao` e `negociacao_item`, com os itens de cada negociação e chave `(negociacao_id, fornecimento_id)`) e as técnicas (`produto_lock`, `processed_events`, `cancelamento_antecipado`, `idempotency_keys` e `outbox`). Colunas em `snake_case`; IDs `VARCHAR(64)` (`negociacao_id` e `sugestao_id` `UUID`), `correlation_id` `VARCHAR(128)`; dinheiro `NUMERIC(18,4)`, quantidade `NUMERIC(12,2)`, participação `NUMERIC(6,4)`, `compra_imediata` `BOOLEAN NOT NULL DEFAULT FALSE`, instantes `TIMESTAMPTZ`, `origem` e `destino` `JSONB`. Exceções: `sugestao_leilao.excesso_demanda` `NUMERIC(18,2)` (DG-64) e `processed_events.source` e `event_id` `TEXT`, porque o `eventId` não tem limite de tamanho. Concede `SELECT, INSERT, UPDATE, DELETE` nessas tabelas e `SELECT` em `alembic_version` a `svc_mercado`, como a migração do Pedidos.
+- **Migração (`migracoes/versions/0001_mercado.py`; a `0002_duracao_leilao.py` acrescenta `sugestao_leilao.duracao_leilao_horas`, `integer` nulo e maior que 0, DG-70):** roda com `MIGRATION_DATABASE_URL` (role `portal_ddl`). Começa com `DROP TABLE IF EXISTS` de `mercado.match`, `mercado.modo_negociacao` e `mercado.processed_events`, as tabelas de exemplo que o `database/01-init.sql` do kit cria no schema (DG-56). Depois cria, no schema `mercado`, as tabelas do §6.1 (`produto`, `oferta`, `demanda`, `demanda_modelo`, `sugestao_leilao`, `aceite_leilao`, `negociacao` e `negociacao_item`, com os itens de cada negociação e chave `(negociacao_id, fornecimento_id)`) e as técnicas (`produto_lock`, `processed_events`, `cancelamento_antecipado`, `idempotency_keys` e `outbox`). Colunas em `snake_case`; IDs `VARCHAR(64)` (`negociacao_id` e `sugestao_id` `UUID`), `correlation_id` `VARCHAR(128)`; dinheiro `NUMERIC(18,4)`, quantidade `NUMERIC(12,2)`, participação `NUMERIC(6,4)`, `compra_imediata` `BOOLEAN NOT NULL DEFAULT FALSE`, instantes `TIMESTAMPTZ`, `origem` e `destino` `JSONB`. Exceções: `sugestao_leilao.excesso_demanda` `NUMERIC(18,2)` (DG-64) e `processed_events.source` e `event_id` `TEXT`, porque o `eventId` não tem limite de tamanho. Concede `SELECT, INSERT, UPDATE, DELETE` nessas tabelas e `SELECT` em `alembic_version` a `svc_mercado`, como a migração do Pedidos.
 
 ## 6. Modelo de domínio
 
@@ -340,6 +340,7 @@ Modelos recorrentes (`tipo = "RECORRENTE"`) ficam em `mercado.demanda_modelo` (`
 | situacao | enum | Sim | `ABERTA`, `EM_FORMACAO`, `CONVERTIDA`, `ENCERRADA` (§6.2). |
 | excessoDemanda | quantidade | Sim | Excesso de demanda no último recálculo. |
 | janelaEncerraEm | instante ou `null` | Sim | Primeiro aceite + janela (RN-18); `null` sem aceites. |
+| duracaoLeilaoHoras | inteiro ou `null` | Sim | Duração do leilão escolhida no aceite que abriu a janela (RN-18); `null` = `LEILAO_DURACAO_HORAS`, e volta a `null` quando a sugestão volta a `ABERTA`. |
 | negociacaoId | string UUID ou `null` | Sim | Leilão criado em T1; `null` fora de `CONVERTIDA`. |
 | correlationId | string ou `null` | Sim | Correlação da requisição do aceite que abriu a janela atual (RN-18); `null` sem aceites. Vai nos eventos publicados por `executar_prazos` (§7.4). |
 | abertaEm | instante | Sim | `clock.now()` na criação. |
@@ -619,11 +620,11 @@ Lista as sugestões visíveis à empresa do token (RN-16), em ordem de `abertaEm
 }
 ```
 
-`excessoDemanda` é calculado com a quantidade comprometida já fora da oferta total (RN-06). `minhaParticipacao` é `{"fornecimentoId": ..., "quantidade": ...}` quando a empresa do token tem aceite na sugestão. Os nomes dos outros fornecedores do lote nunca aparecem (RN-16).
+`excessoDemanda` é calculado com a quantidade comprometida já fora da oferta total (RN-06). `duracaoLeilaoHoras` é a duração escolhida no primeiro aceite ou, sem ela, `LEILAO_DURACAO_HORAS` (DG-70). `minhaParticipacao` é `{"fornecimentoId": ..., "quantidade": ...}` quando a empresa do token tem aceite na sugestão. Os nomes dos outros fornecedores do lote nunca aparecem (RN-16).
 
 #### API-11, API-12 e API-13 — Aceites
 
-API-11, requisição (todos os campos obrigatórios, nenhum outro aceito):
+API-11, requisição: `fornecimentoId` e `quantidade` obrigatórios; `duracaoLeilaoHoras` opcional, inteiro de 1 a 999999 (sem máximo de negócio: o limite só evita uma data impossível); `null`, número com casas, texto ou booleano → `422 VALIDACAO_INVALIDA`; nenhum outro campo aceito. Só o aceite que leva a sugestão de `ABERTA` a `EM_FORMACAO` define a duração; nos seguintes, o campo é ignorado e a resposta mostra a duração em vigor (RN-18, DG-70). Exemplo sem o campo opcional:
 
 ```json
 {
@@ -1440,17 +1441,22 @@ Cenário: Idempotency-Key repetida e compra imediata
 Cenário: Primeiro aceite abre a janela de adesão
   Dado o cenário E
   Quando TK-FORN-X envia às 12:00 POST /api/v1/mercado/sugestoes-leilao/S1/aceites com {"fornecimentoId": OF-X, "quantidade": 60.00}
-  Então retorna 201 com situacao "EM_FORMACAO", quantidadeNoLote 60.00, fornecedoresNoLote 1, janelaEncerraEm "2026-11-20T13:00:00.000Z" e minhaParticipacao {OF-X, 60.00}
+  Então retorna 201 com situacao "EM_FORMACAO", quantidadeNoLote 60.00, fornecedoresNoLote 1, janelaEncerraEm "2026-11-20T13:00:00.000Z", duracaoLeilaoHoras 24 e minhaParticipacao {OF-X, 60.00}
   E o balanço de P retorna ofertaTotal 40.00 e a vitrine não lista OF-X
   E nada é publicado
 
 # CA-35
-Cenário: Alterar a quantidade e sair do lote antes de T1
+Cenário: Alterar a quantidade, sair do lote antes de T1 e escolher a duração do leilão
   Dado o estado final da CA-34
   Quando TK-FORN-X envia PUT /api/v1/mercado/sugestoes-leilao/S1/aceites/OF-X com {"quantidade": 50.00}
   Então retorna 200 com quantidadeNoLote 50.00 e a vitrine lista OF-X com quantidadeDisponivel 10.00
   Quando TK-FORN-X envia DELETE /api/v1/mercado/sugestoes-leilao/S1/aceites/OF-X
   Então retorna 204, S1 volta a "ABERTA" com janelaEncerraEm null e a vitrine lista OF-X com 60.00
+  Quando TK-FORN-X envia às 12:00 POST com {"fornecimentoId": OF-X, "quantidade": 60.00, "duracaoLeilaoHoras": 48}
+  Então retorna 201 com situacao "EM_FORMACAO" e duracaoLeilaoHoras 48
+  Quando TK-FORN-Y envia às 12:05 POST com {"fornecimentoId": OF-Y, "quantidade": 40.00, "duracaoLeilaoHoras": 12}
+  Então retorna 201 com situacao "CONVERTIDA" e duracaoLeilaoHoras 48
+  E o leilao_iniciado publicado tem iniciaEm "2026-11-20T12:05:00.000Z" e encerraEm "2026-11-22T12:05:00.000Z"
 
 # CA-36
 Cenário: Oferta de outra empresa, de outro produto, repetida ou acima do disponível
@@ -1463,6 +1469,8 @@ Cenário: Oferta de outra empresa, de outro produto, repetida ou acima do dispon
   Então retorna 409 com codigo "ACEITE_JA_REGISTRADO"
   Quando TK-FORN-Y envia POST com {OF-Y, 40.01}
   Então retorna 422 com codigo "QUANTIDADE_INDISPONIVEL"
+  Quando TK-FORN-Y envia POST com {"fornecimentoId": OF-Y, "quantidade": 1.00, "duracaoLeilaoHoras": 0}, e de novo com 1.5, "48" e null
+  Então cada resposta é 422 com codigo "VALIDACAO_INVALIDA"
   Quando TK-FORN-Y envia PUT /api/v1/mercado/sugestoes-leilao/S1/aceites/OF-Y com {"quantidade": 1.00}
   Então retorna 404 com codigo "ACEITE_NAO_ENCONTRADO"
 
@@ -1741,10 +1749,10 @@ Cenário: Exceção inesperada do repositório
 | RN-15 | Saldo: abrir uma direta soma a quantidade em `emNegociacao`. Uma demanda pode ter várias diretas abertas com ofertas diferentes, desde que a soma não passe do saldo. (DG-32, DG-33) | DEM-A 50.00: 30.00 + 20.00 → ok; mais 0.01 → 422. |
 | RN-16 | Sugestão: no máximo uma ativa (`ABERTA` ou `EM_FORMACAO`) por produto. Recalculado o balanço: sem sugestão ativa e gatilho verdadeiro → cria uma `ABERTA`; sugestão `ABERTA` e gatilho falso → `ENCERRADA`. `excessoDemanda` é atualizado a cada recálculo. A API-10 mostra a sugestão à empresa com aceite nela ou que é fornecedor elegível; nunca mostra nomes de outros fornecedores. Sem expiração por tempo. (DG-01, DG-07, DG-09, DG-12) | Oferta nova cobre a demanda → `ENCERRADA` na hora. |
 | RN-17 | Aceite (API-11), na ordem do §7.2: sugestão ativa e, se `EM_FORMACAO`, `agora < janelaEncerraEm` (senão `409 SUGESTAO_ENCERRADA`); oferta existente e negociável (senão `422 OFERTA_INDISPONIVEL`); oferta da empresa do token (senão `403 OFERTA_DE_OUTRA_EMPRESA`); mesmo produto (senão `422 PRODUTO_DIFERENTE`); empresa sem item em leilão `ABERTA` do produto (senão `409 FORNECEDOR_EM_LEILAO`); oferta sem aceite na sugestão (senão `409 ACEITE_JA_REGISTRADO`); quantidade ≤ disponível livre (senão `422 QUANTIDADE_INDISPONIVEL`). Uma empresa pode ter parte do estoque no lote e o resto na direta. (DG-14, DG-15, DG-17) | FORN-Y com OF-Y 40.01 (livre 40.00) → 422. |
-| RN-18 | Janela de adesão: o primeiro aceite de uma sugestão `ABERTA` a leva a `EM_FORMACAO` com `janelaEncerraEm = agora + LEILAO_JANELA_ADESAO_MINUTOS` e grava na sugestão o `correlationId` da requisição. Aceites seguintes não mudam a janela nem o `correlationId`. (DG-10, DG-13) | Aceite às 12:00 → janela até 13:00. |
+| RN-18 | Janela de adesão: o primeiro aceite de uma sugestão `ABERTA` a leva a `EM_FORMACAO` com `janelaEncerraEm = agora + LEILAO_JANELA_ADESAO_MINUTOS` e grava na sugestão o `correlationId` da requisição e a duração do leilão (`duracaoLeilaoHoras` do aceite, ou `null` para usar `LEILAO_DURACAO_HORAS`). Aceites seguintes não mudam a janela, a duração nem o `correlationId`; o `duracaoLeilaoHoras` deles é ignorado. Quando a sugestão volta a `ABERTA` (último aceite removido), janela, duração e `correlationId` voltam a `null`. (DG-10, DG-13, DG-70) | Aceite às 12:00 com 48 → janela até 13:00 e leilão de 48 h. |
 | RN-19 | Alterar e sair (API-12, API-13): permitidos enquanto a sugestão está `EM_FORMACAO` e `agora < janelaEncerraEm`; senão `409 SUGESTAO_ENCERRADA`. Na alteração, a nova quantidade deve ser ≤ disponível livre + quantidade atual do aceite (senão `422 QUANTIDADE_INDISPONIVEL`). Aceite inexistente ou de oferta de outra empresa → `404 ACEITE_NAO_ENCONTRADO`. Ao sair o último aceite: gatilho verdadeiro → `ABERTA` com `janelaEncerraEm = null` e `correlationId = null`; falso → `ENCERRADA`. (DG-18) | Sair de S1 com gatilho verdadeiro → `ABERTA`. |
 | RN-20 | Depois de T1 não há entrada, alteração nem saída: o lote fica fixo. (DG-14) | API-11 em S1 `CONVERTIDA` → 409. |
-| RN-21 | Fechamento do lote (T1 = `agora`), numa sugestão `EM_FORMACAO`, no primeiro destes: (a) `executar_prazos` com `janelaEncerraEm <= agora`; (b) depois de um aceite (API-11), todas as empresas fornecedoras elegíveis têm aceite; (c) recálculo do balanço com o gatilho falso. Itens na ordem de `aceitoEm` e depois `fornecimentoId`, com `quantidade = min(quantidade aceita, quantidadeDisponivel atual)`; itens com quantidade 0, com `valorItem` 0.00 (RN-22) ou de oferta não negociável saem; depois, na ordem acima, sai cada item que faria o lote passar de 1000 itens, de `9999999999.99` na soma das quantidades ou de `99999999999999.99` na soma dos `valorItem`. Sem itens → sugestão `ENCERRADA`, sem negociação e sem evento; o balanço é recalculado na mesma transação e, com o gatilho verdadeiro, uma nova sugestão abre ali (DG-65). Com itens → cria a negociação `LEILAO_DIRETO` `ABERTA` com `iniciaEm = T1` e `encerraEm = T1 + LEILAO_DURACAO_HORAS`, a sugestão vai a `CONVERTIDA` com o `negociacaoId`, e são publicados `modo_negociacao_definido` e `leilao_iniciado`, nessa ordem. A Negociação então pede o pedido temporário de cada item e só libera os lances com todas as reservas confirmadas; item com reserva recusada sai do lote antes do primeiro lance (DG-51). Depois, o balanço é recalculado (uma nova sugestão pode abrir para os demais fornecedores). (DG-10, DG-13, DG-16, PROF-02, PROF-03) | Cenário L: lote fechado às 12:10 com OF-X e OF-Y. |
+| RN-21 | Fechamento do lote (T1 = `agora`), numa sugestão `EM_FORMACAO`, no primeiro destes: (a) `executar_prazos` com `janelaEncerraEm <= agora`; (b) depois de um aceite (API-11), todas as empresas fornecedoras elegíveis têm aceite; (c) recálculo do balanço com o gatilho falso. Itens na ordem de `aceitoEm` e depois `fornecimentoId`, com `quantidade = min(quantidade aceita, quantidadeDisponivel atual)`; itens com quantidade 0, com `valorItem` 0.00 (RN-22) ou de oferta não negociável saem; depois, na ordem acima, sai cada item que faria o lote passar de 1000 itens, de `9999999999.99` na soma das quantidades ou de `99999999999999.99` na soma dos `valorItem`. Sem itens → sugestão `ENCERRADA`, sem negociação e sem evento; o balanço é recalculado na mesma transação e, com o gatilho verdadeiro, uma nova sugestão abre ali (DG-65). Com itens → cria a negociação `LEILAO_DIRETO` `ABERTA` com `iniciaEm = T1` e `encerraEm = T1 + duração do leilão` (RN-18, DG-70), a sugestão vai a `CONVERTIDA` com o `negociacaoId`, e são publicados `modo_negociacao_definido` e `leilao_iniciado`, nessa ordem. A Negociação então pede o pedido temporário de cada item e só libera os lances com todas as reservas confirmadas; item com reserva recusada sai do lote antes do primeiro lance (DG-51). Depois, o balanço é recalculado (uma nova sugestão pode abrir para os demais fornecedores). (DG-10, DG-13, DG-16, PROF-02, PROF-03) | Cenário L: lote fechado às 12:10 com OF-X e OF-Y. |
 | RN-22 | Preço inicial e incremento: `valorItem = quantidade × precoUnitario` (`ROUND_HALF_UP`, 2 casas); `precoInicial = Σ valorItem`; `incrementoMinimo = max(0.01, precoInicial × LEILAO_INCREMENTO_MINIMO_PERCENTUAL / 100)` (`ROUND_HALF_UP`, 2 casas). O preço inicial é o valor mínimo do primeiro lance; o lance é o valor total do lote inteiro. (DG-11, DG-19, DG-20, PROF-04, PROF-05) | 480.00 + 300.00 = 780.00; incremento 7.80. 0.01 × 0.01 → `valorItem` 0.00 → o item sai do lote (RN-21). |
 | RN-23 | Participação, pelo maior resto: (1) cada item recebe `valorItem / precoInicial` truncado em 4 casas; o que daria `0.0000` fica com `0.0001` (os schemas exigem participação > 0); (2) seja `d = 1.0000 − Σ participações`; se `d > 0`, soma-se `0.0001` a `d / 0.0001` itens, um por item, na ordem do maior resto (`valorItem / precoInicial` menos o valor truncado; empate: o primeiro na ordem); se `d < 0` (só por causa do piso), subtrai-se `|d|` começando pelo item de maior participação (empate: o primeiro na ordem), sem deixar nenhum abaixo de `0.0001`, e o que faltar sai do seguinte. O limite de 1000 itens (RN-21) garante que a soma é sempre `1.0000` e nenhuma participação fica negativa ou zero. Na direta, `participacao = 1.0000`. A participação de 4 casas é informativa (telas e API-09); o rateio do valor vencedor é feito pela Negociação na proporção exata de `valorItem`: cada item recebe `lance × valorItem / precoInicial`, arredondado para baixo em centavos, e o que sobra vai para o item de maior `valorItem` (DG-22). Com o lance igual ou acima do preço inicial, nenhum item recebe menos que o seu `valorItem`; se um item sair por reserva recusada, ela recalcula preço inicial, incremento e participações pela RN-22 e por esta regra, sobre os itens restantes, com o `incrementoMinimoPercentual` do `leilao_iniciado` (não na proporção do incremento anterior). (DG-22, DG-23, DG-51) | 480/780 → 0.6154; 300/780 → 0.3846; soma 1.0000. Item de 0.01 num lote de 1000.01 → 0.0001; o maior fica com 0.9999. 155 itens de valor igual → 0.0065 nos 80 primeiros e 0.0064 nos 75 seguintes. |
 | RN-24 | Contexto do produto: no detalhe (API-09) de um `LEILAO_DIRETO` `ABERTA`, `contextoProduto = {situacao, desde}` com a situação atual do balanço do produto e `situacaoDesde`. Só consulta; o leilão nunca é interrompido por mudança de balanço. (DG-08) | Oferta nova às 12:30 → `OFERTA_SUFICIENTE` desde 12:30. |
@@ -1881,6 +1889,7 @@ Decisões do autor (Brunno Alexcson), tomadas a partir das respostas do professo
 | PROF-10 | O fornecedor pode reajustar o preço de todo o estoque da oferta. | RN-01 |
 | PROF-11 | Demanda sem fornecedor no portal é válida e serve para atrair fornecedores; recorrência avisa o mercado. | RN-06, RN-08 |
 | PROF-12 | O estoque é por fornecimento (produto × fornecedor). | §6.1 |
+| PROF-13 | (27/11) A duração do leilão pode ser definida pelo sistema, como 24 h, mas o fornecedor também pode escolher a janela de tempo; sem a escolha, vale o padrão. | RN-18, RN-21, DG-70 |
 
 **Decisões do grupo**
 
@@ -1898,7 +1907,7 @@ Decisões do autor (Brunno Alexcson), tomadas a partir das respostas do professo
 | DG-10 | Decisão | Leilão compartilhado | A sugestão é a janela de formação do lote; adesão opcional; lote de um só fornecedor é válido; separação local até T1. ↻ Leilão individual; janela como entidade separada. Status Report: sim. |
 | DG-11 | Decisão | Lance no lote inteiro | Sem lance parcial (PROF-05). ↻ Leilão de várias unidades (custo alto, na Negociação). |
 | DG-12 | Decisão | Sugestão sem aceite | Continua enquanto houver excesso; a escassez é resolvida na negociação direta, por quem abre primeiro; demandas sem oferta aguardam até serem atendidas, canceladas ou terem o prazo vencido (DG-48). ↻ Prioridade por maior `precoMaximo`. |
-| DG-13 | Decisão | T1 e T2 | Definidos pelo sistema: T1 pela RN-21; T2 = T1 + `LEILAO_DURACAO_HORAS`. ↻ O fornecedor que abre escolhe a duração; T2 limitado pelo menor `prazoDesejado`. Status Report: sim. |
+| DG-13 | Decisão | T1 e T2 | T1 pelo sistema (RN-21); T2 = T1 + duração do leilão, de 24 h por padrão (`LEILAO_DURACAO_HORAS`) ou escolhida pelo fornecedor que abre a janela (DG-70, PROF-13). ↻ T2 limitado pelo menor `prazoDesejado`. |
 | DG-14 | Decisão | Entrada no lote | Por conta própria, até T1. ↻ Inclusão automática por preferência na oferta. |
 | DG-15 | Decisão | Quantidade no lote | O fornecedor escolhe, até o disponível livre. ↻ Sempre todo o disponível. |
 | DG-16 | Decisão | Tamanho do lote | Sem mínimo; o máximo é só o limite técnico da RN-21 (1000 itens e as somas de quantidade e valor dentro dos limites do §4), que mantém a participação sempre positiva (RN-23). ↻ `LEILAO_LOTE_MINIMO`; reduzir o lote em T1 à demanda total. |
@@ -1955,6 +1964,7 @@ Decisões do autor (Brunno Alexcson), tomadas a partir das respostas do professo
 | DG-67 | Decisão | Oferta que muda de produto durante a formação do lote | O aceite da oferta na sugestão `EM_FORMACAO` do produto anterior é removido, como na API-13 (sem aceites, a sugestão volta a `ABERTA` sem janela), e a quantidade deixa de estar comprometida. Em T1, item de oferta de outro produto sai do lote (RN-21). Evita que a mesma quantidade fique livre no produto novo e entre no leilão do produto anterior. ↻ Manter o aceite e contar o compromisso em todas as sugestões. |
 | DG-68 | Decisão | Concorrência entre réplicas na cópia de produtos e nas demandas | `produto_cadastrado` e `produto_atualizado` comparam o instante depois de `bloquear_produto`, para um evento antigo não sobrescrever um mais novo gravado pela outra réplica (RN-02). Criação e cancelamento de demandas e modelos recorrentes bloqueiam o ID com `bloquear_id_demanda` antes dos produtos e conferem modelo cancelado e cancelamento antecipado depois do bloqueio, para uma ocorrência ou demanda não ficar aberta quando o cancelamento chega ao mesmo tempo (RN-08, RN-09). |
 | DG-69 | Decisão | Instante e unidade depois do bloqueio | Com duas réplicas, uma operação pode esperar o bloqueio enquanto a outra muda o produto ou o relógio passa do prazo. Por isso `agora` é lido de novo depois de cada bloqueio, inclusive o da chave de idempotência (os prazos da janela de adesão, da demanda e das 24 h da RN-30 usam esse valor) e a unidade da RN-03 é comparada com o produto já bloqueado. Ex.: aceite que começa às 12:59:59.999 e obtém o bloqueio às 13:00:01, numa janela que encerra às 13:00 → `409 SUGESTAO_ENCERRADA`. ↻ Usar o instante de chegada da requisição ou do evento. |
+| DG-70 | Decisão | Duração escolhida pelo fornecedor | Pedido do professor em 27/11 (PROF-13). O aceite que abre a janela de adesão pode trazer `duracaoLeilaoHoras` (inteiro em horas, a partir de 1, sem máximo de negócio); sem ele, vale `LEILAO_DURACAO_HORAS` (24 h). Os aceites seguintes não mudam a duração: os demais fornecedores veem a duração na sugestão antes de aderir. T2 = T1 + duração. Nenhum contrato muda: a Negociação já usa o `encerraEm` do `leilao_iniciado`. ↻ Duração por data e hora de término; menor ou maior duração entre os aceites. |
 | PR-01 | Premissa | Intervalo entre T1 e a reserva | Em T1 a separação local é liberada; até chegar o `estoque_atualizado` da reserva do pedido temporário, a quantidade do lote volta a contar como disponível livre. Uma direta aberta nesse intervalo pode tomar o estoque; nesse caso a reserva do item é recusada e a Negociação o retira do lote antes do primeiro lance (DG-51). Nenhuma venda acontece sem reserva; o efeito possível é um lote menor que o aceito. |
 | PR-02 | Premissa | Fim do leilão | Este serviço não acompanha T2; a negociação só muda com o `negociacao_fechada`. |
 | PR-03 | Premissa | Ordem entre tópicos | Demanda ou oferta podem chegar antes do produto; o balanço usa o `produtoId` e a unidade do evento até o produto chegar (RN-03). |
@@ -1994,6 +2004,7 @@ Decisões do autor (Brunno Alexcson), tomadas a partir das respostas do professo
 | Número com mais de 2 casas ou como string | `422 VALIDACAO_INVALIDA` na API; mensagem inválida no consumo. |
 | Evento com instante igual ao gravado | Ignorado (RN-01, RN-02). |
 | Disponível menor que a quantidade comprometida (oferta encerrada durante a formação) | Disponível livre fica em 0.00 (RN-04); em T1 o item usa `min(aceite, disponível)` e sai se der 0 (RN-21). |
+| `duracaoLeilaoHoras` num aceite que não abre a janela | Ignorado: vale a duração do aceite que abriu a janela; a resposta mostra a duração em vigor (RN-18, DG-70). |
 | Aceite e mudança de balanço ao mesmo tempo | Serializados por `bloquear_produto`; vale a ordem de entrada na transação (RN-06). |
 | `negociacao_fechada` de negociação desconhecida ou encerrada | Ignorado, sem DLT (RN-25). |
 | `negociacao_fechada` republicado (mesmo `negociacaoId`, outro `eventId`) | Ignorado: só o primeiro é aplicado (RN-25, DG-53). |
@@ -2062,3 +2073,4 @@ Pré-conferência do autor antes do gate G1; o QA confirma ou desmarca cada item
 | 0.9 | 2026-11-25 | Brunno Alexcson | Decisões da implementação (etapas 1 e 2): DG-59 a DG-66 (prazo vencido na direta e na aptidão, saldo negociável sem valor negativo, unidade sem produto, casos da `mercado.dlt`, casas do `incrementoMinimoPercentual`, totais sem limite, lote fechado sem itens, projeção da sugestão); glossário, §5 (`jsonschema` só nos testes), migração (`excesso_demanda` `NUMERIC(18,2)` e `processed_events` com `TEXT`), §6.1, §7.4 e RN-21 ajustados; premissas da implementação no §13.1. |
 | 0.10 | 2026-11-26 | Brunno Alexcson | Revisão independente do código: oferta que muda de produto sai da sugestão do produto anterior e nunca entra em lote de outro produto (DG-67); bloqueio do produto na RN-02 e porta `bloquear_id_demanda` nas RN-08 e RN-09 (DG-68, §5.1); `30` e `30.00` com o mesmo hash de idempotência (§13.1). |
 | 0.11 | 2026-11-26 | Brunno Alexcson | Segunda revisão independente do código: `agora` relido depois dos bloqueios e unidade da RN-03 comparada com o produto bloqueado (DG-69, glossário); `page` limitado a 9 dígitos (§7.2), para número muito longo responder `422` e não `500`; validade da chave de idempotência conferida depois do bloqueio da chave; §14 atualizado; INT-MRC-03 registrada na issue #6 do kit; INT-MRC-04 fechada com as respostas das issues #1 e #2 do Compra e Demanda (DG-03, DG-45, DG-47, DG-48). |
+| 0.12 | 2026-11-27 | Brunno Alexcson | Duração do leilão escolhida pelo fornecedor no primeiro aceite, com 24 h por padrão (PROF-13, DG-70): `duracaoLeilaoHoras` na API-11 e na sugestão (§6.1, migração `0002`), RN-18, RN-21, DG-13, glossário (T2), CA-34 a CA-36 e §13.1. |
