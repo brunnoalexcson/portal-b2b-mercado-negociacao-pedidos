@@ -4,13 +4,13 @@ Responsável: Brunno Alexcson. Porta `8105`, rotas `/api/v1/mercado`, schema Pos
 
 O serviço acompanha, por produto, a oferta disponível e a demanda aberta do portal e decide como cada compra é negociada: negociação direta entre um comprador e a oferta que ele escolher, ou leilão em lote quando a demanda supera a oferta e os fornecedores aceitam a sugestão de leilão. É o bloco 5 do diagrama da arquitetura ("calcula oferta vs demanda, define modo de negociação, inicia leilões quando necessário").
 
-## Situação em 26/11/2026 (v0.11)
+## Situação em 27/11/2026 (v0.12)
 
 | Item | Situação |
 |---|---|
-| Especificação (ESP-MRC-001 v0.11) | Rascunho no modelo ERS-LLM v1.2 do QA, antes do gate G1; 17 RFs, 59 CAs, decisões DG-01 a DG-69 |
+| Especificação (ESP-MRC-001 v0.12) | Rascunho no modelo ERS-LLM v1.2 do QA, antes do gate G1; 17 RFs, 59 CAs, decisões DG-01 a DG-70 |
 | Contratos de eventos | Schemas JSON e exemplos validados para os 12 tópicos; conferidos contra os contratos do Pedidos e do Fornecimento |
-| Código (`services/mercado-service/`) | Implementado na estrutura do `pedidos-service`: 201 testes automatizados (Python 3.12, no build Docker) e fluxo real validado na demonstração local com duas réplicas, Redpanda e PostgreSQL. Falta rodar no kit, que depende da criação dos tópicos (INT-MRC-03), e a evidência de concorrência com duas réplicas reais para os RNFs no gate G2 |
+| Código (`services/mercado-service/`) | Implementado na estrutura do `pedidos-service`: 205 testes automatizados (Python 3.12, no build Docker) e fluxo real validado na demonstração local com duas réplicas, Redpanda e PostgreSQL. Falta rodar no kit, que depende da criação dos tópicos (INT-MRC-03), e a evidência de concorrência com duas réplicas reais para os RNFs no gate G2 |
 | Alinhamento com Pedidos | Fechado em 19/11 (INT-MRC-02): a ESP-PED-001 não muda |
 | Alinhamento com Fornecimento e Produtos | Fechado em 25/11 (INT-MRC-05): o contrato de eventos v2.5 (23/11) registra o Mercado como consumidor dos 5 eventos de produto e oferta; o documento de requisitos (v0.13) e a ESP-PRD-001 (v2.3) foram alinhados no PR #45 e a issue #44 de `davicalvarenga/Sistema-MicServ-SD` foi fechada |
 | Alinhamento com Compra e Demanda | Fechado em 26/11 (INT-MRC-04): as issues [#1](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/1) e [#2](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/2) foram respondidas, com todos os pedidos aceitos. A demanda não é editável na v1 e não haverá evento de expiração |
@@ -20,7 +20,7 @@ O serviço acompanha, por produto, a oferta disponível e a demanda aberta do po
 
 ## Documentos
 
-- [Especificação ESP-MRC-001](requisitos.md): regras, rotas, eventos, erros, critérios de aceitação e decisões DG-01 a DG-69, pendências de integração INT-MRC-01 a INT-MRC-11 e pontos fora desta versão (seção 13).
+- [Especificação ESP-MRC-001](requisitos.md): regras, rotas, eventos, erros, critérios de aceitação e decisões DG-01 a DG-70, pendências de integração INT-MRC-01 a INT-MRC-11 e pontos fora desta versão (seção 13).
 - [Contratos de eventos](contratos/): um `<topico>.schema.json` (JSON Schema 2020-12) e um `<topico>.exemplo.json` por tópico consumido e publicado.
 
 ## Como o serviço funciona
@@ -46,7 +46,7 @@ O serviço acompanha, por produto, a oferta disponível e a demanda aberta do po
 1. Quando há oferta e a demanda passa da oferta acima do percentual configurado (`EXCESSO_DEMANDA_MINIMO_PERCENTUAL`, padrão 0), abre uma sugestão de leilão para os fornecedores do produto.
 2. Cada fornecedor decide se entra no lote e com quanto; pode alterar ou sair até T1.
 3. O lote fecha (T1) no fim da janela de adesão, quando todos os fornecedores elegíveis entraram ou quando o gatilho do passo 1 deixa de valer (a oferta volta a cobrir a demanda ou chega a zero).
-4. Em T1, o Mercado calcula o preço inicial (soma de quantidade × preço), o incremento mínimo e a participação de cada fornecedor no valor do lote, e publica `modo_negociacao_definido` e `leilao_iniciado`. T2 = T1 + duração configurada.
+4. Em T1, o Mercado calcula o preço inicial (soma de quantidade × preço), o incremento mínimo e a participação de cada fornecedor no valor do lote, e publica `modo_negociacao_definido` e `leilao_iniciado`. T2 = T1 + duração do leilão: 24 h por padrão, ou a escolhida pelo fornecedor que abriu a janela de adesão.
 5. A Negociação pede o pedido temporário de cada item e só libera os lances com todas as reservas confirmadas. Item com reserva recusada sai do lote antes do primeiro lance, e ela recalcula o preço inicial.
 6. Lances, vencedor e rateio do valor são da Negociação. O Mercado recebe o `negociacao_fechada` para atualizar o saldo das demandas; só o primeiro fechamento de cada negociação é aplicado.
 
@@ -89,9 +89,7 @@ Segue o diagrama: o Mercado inicia os leilões e publica `modo_negociacao_defini
 
 | Grupo | Pendência |
 |---|---|
-| Negociação | Teste integrado com o Mercado (prazo: 30/11). O código que consome `leilao_iniciado` e `modo_negociacao_definido` entrou na `main` em 26/11, e a ESP-NEG-001 v1.5 já cita a ESP-MRC-001 v0.11 |
 | Infra | Aguardando resposta da [issue #6](https://github.com/Printf-PedroCardoso/portal-b2b-kit-infra/issues/6), aberta em 26/11 (INT-MRC-03): Mercado × Infra: tópicos que o Mercado consome, consumidores no CONTRACTS.md e tabelas de exemplo do schema mercado |
-| Compra e Demanda | Implementar o combinado nas issues [#1](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/1) e [#2](https://github.com/LuccaStuart/portal-b2b-compra-demanda/issues/2), respondidas em 26/11 (schemas, exemplos e `docs/03-eventos-e-integracoes.md`). O cancelamento das demandas de produto excluído depende do nome do tópico do Fornecimento |
 | Banco de Dados | Validar as tabelas do §6.1 e os tipos decimais (o DR-BD-002 não tem tabelas do Mercado); responder pelo Teams (INT-MRC-06) |
 | UX/UI | Telas de vitrine, sugestão de leilão e contexto do leilão |
 | QA | Revisar a ESP no gate G1 |
