@@ -155,3 +155,19 @@ O mesmo leilão curto sem nenhum lance, ou com uma oferta sem resposta da reserv
 ## Conectar ao kit da turma
 
 O [override do Compose](compose.negociacao.yml) troca o build de `app1-negociacao` e `app2-negociacao` por este projeto e acrescenta `negociacao-migrate`; as réplicas só sobem depois da migração. Informe `NEGOCIACAO_PROJECT_DIR` (caminho absoluto desta pasta), `NEGOCIACAO_DATABASE_URL` (role `svc_negociacao`) e `NEGOCIACAO_MIGRATION_DATABASE_URL` (role `portal_ddl`), como em [.env.example](.env.example). O tópico `pedido_temporario_solicitado` ainda precisa ser criado no kit (issue #3 do kit, aberta pelo Pedidos).
+
+## Deploy na AWS (ambiente de integração do kit)
+
+O workflow `.github/workflows/deploy-negociacao.yml`, na raiz do repositório do grupo, segue o modelo do kit, como o do Pedidos. Ele constrói a imagem `runtime` a partir de `services/negociacao-service` e publica em `app1` e `app2` a cada push na `main` que mexa nessa pasta. Também dá para rodar manualmente, em **Actions → Run workflow**.
+
+O container lê as variáveis que o `docker-compose.aws.yml` do kit injeta: `DATABASE_URL`, `KAFKA_BOOTSTRAP_SERVERS` e `PORT`.
+
+| Variável | Sem ela |
+|---|---|
+| `JWKS_URL` | Usa `http://usuarios-service:8101/.well-known/jwks.json` (Identity na rede interna da AWS) |
+| `MIGRATION_DATABASE_URL` (role `portal_ddl`) | O container não migra; a Infra precisa aplicar as migrações `0001` e `0002` |
+| `KAFKA_GROUP_ID` | `negociacao-service-v1` |
+
+Quando `MIGRATION_DATABASE_URL` existe, o container roda `alembic upgrade head` antes de subir. Uma trava no banco serializa as duas réplicas.
+
+O tópico `pedido_temporario_solicitado` ainda não está entre os oficiais do kit: até a Infra criá-lo, a abertura das negociações não chega ao Pedidos.

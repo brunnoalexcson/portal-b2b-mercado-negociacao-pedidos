@@ -4,7 +4,7 @@ ID_EXEMPLO = "31000000-0000-4000-8000-000000000001"
 
 DESCRICAO = """
 Conduz os **leilões** (`LEILAO_DIRETO`) e as **negociações diretas** (`VENDA_DIRETA`, inclusive a compra imediata) do
-Portal B2B. Não há rota de criação: as negociações são abertas pelos eventos do Mercado (ESP-NEG-001 v1.5).
+Portal B2B. Não há rota de criação: as negociações são abertas pelos eventos do Mercado (ESP-NEG-001 v1.6).
 
 **Token.** No ambiente integrado, faça `POST /api/v1/auth/login` e depois `POST /api/v1/auth/switch-context` no
 Identity-Service, escolhendo a empresa e o escopo (`BUYER` ou `SUPPLIER`). Na demo local, use o emissor de teste em
@@ -203,7 +203,7 @@ def documentar(app, erros):
         if app.openapi_schema:
             return app.openapi_schema
         schema = gerar()
-        schema["info"].update(description=DESCRICAO, version="1.5")
+        schema["info"].update(description=DESCRICAO, version="1.6")
         schema["tags"] = TAGS
         # tira o HTTPValidationError do FastAPI: o serviço nunca responde nesse formato
         schema["components"].pop("schemas", None)

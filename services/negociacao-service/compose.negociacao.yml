@@ -13,7 +13,7 @@ x-negociacao: &negociacao
     JWKS_URL: ${JWKS_URL:-http://gateway:8080/.well-known/jwks.json}
     JWT_ISSUER: ${JWT_ISSUER:-identity-service}
     JWT_AUDIENCE: ${JWT_AUDIENCE:-b2b-platform}
-    APP_PORT: ${APP_PORT:-8106}
+    PORT: ${PORT:-8106}
     LOG_LEVEL: ${LOG_LEVEL:-INFO}
   depends_on:
     negociacao-migrate:

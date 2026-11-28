@@ -5,11 +5,11 @@
 | Campo | Valor |
 |---|---|
 | Identificador | ESP-NEG-001 |
-| Versão | 1.5 |
+| Versão | 1.6 |
 | Status | Rascunho |
 | Serviço / Bounded context | `negociacao-service` (microsserviço 6 do Portal B2B Distribuído): Negociação e Leilão. Porta `8106`, rotas `/api/v1/negociacoes`, schema PostgreSQL `negociacao`, role `svc_negociacao` |
 | Autores (PO / Dev / QA) | PO e Dev: Caio Almeida Oliveira (grupo Mercado, Negociação/Leilão e Pedidos). QA: Grupo de Teste e Qualidade (revisão no gate G1) |
-| Data | 2026-11-26 |
+| Data | 2026-11-27 |
 | Documentos relacionados | ESP-MRC-001 v0.11 (`docs/mercado/requisitos.md`, revisão `bc906ba`); ESP-PED-001 v2.2 (`docs/pedidos/requisitos.md`, revisão `e61bd0e`); contratos de eventos em `docs/negociacao/contratos/`; kit de Infraestrutura (`CONTRACTS.md` e `ORIENTACOES-ARQUITETURA-GRUPOS.md`, revisão `630515c`); Identity-Service (revisão `800f2d8` e resposta na issue Matheus-Allvz/Identity-Service#27); DR-BD-002 v1.0; modelo ERS-LLM v1.2 do QA (revisão `efc05b6`) |
 
 ## 1. Diretivas para a LLM geradora
@@ -128,7 +128,7 @@ Passos do fluxo principal: (1) o Fornecimento publica as ofertas e o Demanda, as
 | Ponto de entrada (execução) | `uvicorn app.main:criar_app_real --factory --host 0.0.0.0 --port 8106`: monta os adaptadores reais a partir das variáveis de ambiente e inicia, como tarefas de fundo, o consumidor Kafka, o publicador da outbox e o agendador (`executar_prazos` a cada 1 s). |
 | Formato de data/hora | Instante (§4). |
 | Formato monetário | Valor monetário (§4). Arredondamento sempre explícito, conforme RN-05 e RN-11. |
-| Configuração | `DATABASE_URL` (role `svc_negociacao`), `MIGRATION_DATABASE_URL` (role `portal_ddl`), `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_GROUP_ID` (`negociacao-service-v1`), `JWKS_URL` (`https://identity.matheus-alves.dev/.well-known/jwks.json` por padrão), `JWT_ISSUER` (`identity-service`), `JWT_AUDIENCE` (`b2b-platform`), `APP_PORT` (`8106`), `LOG_LEVEL` (`INFO`). Documentadas em `.env.example`. |
+| Configuração | `DATABASE_URL` (role `svc_negociacao`), `MIGRATION_DATABASE_URL` (role `portal_ddl`), `KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_GROUP_ID` (`negociacao-service-v1`), `JWKS_URL` (`http://usuarios-service:8101/.well-known/jwks.json` por padrão, o Identity na rede interna da AWS do kit), `JWT_ISSUER` (`identity-service`), `JWT_AUDIENCE` (`b2b-platform`), `PORT` (`8106`, o nome que o kit injeta), `LOG_LEVEL` (`INFO`). Documentadas em `.env.example`. |
 
 ```text
 services/negociacao-service/
@@ -1859,3 +1859,4 @@ Pré-conferência do autor antes do gate G1; o QA confirma ou desmarca cada item
 | 1.3 | 2026-11-25 | Caio Almeida Oliveira | Teto da proposta na negociação direta (D43, RN-23, erro `PROPOSTA_ACIMA_DA_OFERTA`, CA-25 ampliada). DLT igual ao kit, ao Mercado e ao Pedidos (D44, RN-19, RF-15, CA-49, §5.1, §7.4, §13.1 e schema da `negociacao.dlt`; issue #10). INT-NEG-07 fechada pela resposta do Identity-Service, INT-NEG-12 pela ESP-MRC-001 v0.6 e INT-NEG-10 decidida sem consulta ao professor; compra imediata com o campo `compraImediata` combinado com o Mercado (D46, RN-24, erro `COMPRA_IMEDIATA`, CA-62 e CA-63; INT-NEG-14 aberta e fechada); glossário com os estados finais ("Deserto", "Encerrado", "Recusado", "Expirado") e "Negociação direta" revista; prorrogação do leilão e lance automático fora do escopo (§3.2); migração apaga as tabelas de exemplo do kit (D45, §6.1); INT-NEG-05 e INT-NEG-06 classificadas como dependências externas; documentos relacionados apontam para a ESP-MRC-001 v0.8 e a ESP-PED-001 v2.2. Alinhamento com a v0.8 do Mercado: exemplos com `compraImediata` e `incrementoMinimoPercentual`, que passa a ser obrigatório no `leilao_iniciado` e é usado no recálculo do incremento (D47, RN-05). Sem mudança de evento, status ou contrato com Mercado e Pedidos. |
 | 1.4 | 2026-11-25 | Caio Almeida Oliveira | Pedidos da issue #11 do Mercado: rateio na proporção exata de `valorItem`, sem a participação arredondada (RN-11, D36; CA-20, CA-23 e exemplo de `negociacao_fechada` com os valores novos); participação recalculada pelo maior resto com piso de `0.0001`, igual à RN-23 da ESP-MRC-001 (RN-05, D48, CA-10); motivo da D40 corrigido. O incremento pelo percentual já tinha entrado na v1.3 (D47). |
 | 1.5 | 2026-11-26 | Caio Almeida Oliveira | CA-51 e RNF-01 alinhadas à RN-11 da v1.4: o lance 0.30 sobre o lote 0.10 + 0.20 gera alocações 0.10 e 0.20 pela proporção exata (os 0.09 e 0.21 vinham do rateio pela participação). Título do exemplo de `negociacao_fechada` no §7.4 sem a referência às participações. Achado na implementação do encerramento do leilão. Documentos relacionados atualizados para a ESP-MRC-001 v0.11 e a revisão `e61bd0e` da ESP-PED-001 v2.2, sem mudança de contrato. |
+| 1.6 | 2026-11-27 | Caio Almeida Oliveira | Configuração (§5) alinhada ao deploy do kit na AWS, como o Pedidos: a porta vem de `PORT` (era `APP_PORT`) e, sem `JWKS_URL`, o serviço usa a JWKS do `usuarios-service` na rede interna. Sem mudança de contrato de API ou de eventos. |

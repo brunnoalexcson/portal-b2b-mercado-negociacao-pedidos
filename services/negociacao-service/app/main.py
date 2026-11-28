@@ -91,7 +91,8 @@ def criar_app_real() -> FastAPI:
                       os.getenv("KAFKA_GROUP_ID", "negociacao-service-v1"))
     app = create_app(
         event_bus, RelogioSistema(), repositorio,
-        ChavesJwks(os.getenv("JWKS_URL", "https://identity.matheus-alves.dev/.well-known/jwks.json")),
+        # sem JWKS_URL (o docker-compose.aws.yml do kit não injeta), usa o Identity na rede interna da AWS
+        ChavesJwks(os.getenv("JWKS_URL", "http://usuarios-service:8101/.well-known/jwks.json")),
         os.getenv("JWT_ISSUER", "identity-service"), os.getenv("JWT_AUDIENCE", "b2b-platform"),
     )
 

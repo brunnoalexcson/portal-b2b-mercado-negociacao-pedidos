@@ -1,0 +1,145 @@
+# ==============================================================================
+# Template de Deploy Automatico para Repositorios de Microsservicos (Portal B2B)
+#
+# INSTRUCOES PARA A EQUIPE:
+# 1. Copie este arquivo para `.github/workflows/deploy.yml` no repositorio do seu servico.
+# 2. Altere APENAS o valor de `SERVICE_NAME` abaixo para o nome exato do seu servico:
+#      usuarios-service | produtos-service | fornecimentos-service |
+#      demanda-service  | mercado-service  | negociacao-service    |
+#      pedidos-service  | logistica-service | transportadoras-service
+# 3. A Equipe de Infra configura os Secrets AWS no repositorio (ou na Organizacao).
+# 4. Todo push na branch `main` (ou execucao manual na aba Actions) faz deploy
+#    automatico em app1 e app2!
+# ==============================================================================
+
+name: Deploy negociacao-service (AWS Integracao)
+
+on:
+  push:
+    branches:
+      - main
+    # Repositorio com tres servicos: so publica a Negociacao quando a pasta dela (ou este arquivo) muda.
+    paths:
+      - services/negociacao-service/**
+      - .github/workflows/deploy-negociacao.yml
+  workflow_dispatch:
+
+env:
+  # >>> ALTERE APENAS ESTA LINHA COM O NOME DO SEU SERVICO <<<
+  SERVICE_NAME: negociacao-service
+  AWS_REGION: us-east-2
+  ENVIRONMENT: integracao
+
+jobs:
+  build-and-deploy:
+    name: Build ECR e Deploy em app1/app2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login no Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build e Push da imagem Docker (tag imutavel)
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          IMAGE_TAG="run-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}"
+          FULL_IMAGE="${ECR_REGISTRY}/portal-b2b/${SERVICE_NAME}:${IMAGE_TAG}"
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+
+          echo "==> Buildando ${FULL_IMAGE}..."
+          docker build --target runtime -t "${FULL_IMAGE}" services/negociacao-service
+
+          echo "==> Enviando para o ECR..."
+          docker push "${FULL_IMAGE}"
+
+      - name: Disparar deploy em app1 e app2 via AWS SSM
+        env:
+          IMAGE_TAG: ${{ steps.build-image.outputs.image_tag }}
+        run: |
+          echo "==> Enviando comando de deploy para app1 e app2..."
+          COMMAND_ID=$(aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Ambiente,Values=${ENVIRONMENT}" "Key=tag:Role,Values=Application" \
+            --comment "Deploy ${SERVICE_NAME}:${IMAGE_TAG} (GitHub Actions)" \
+            --parameters "commands=[\"/opt/portal-b2b/scripts/aws-deploy-service.sh ${SERVICE_NAME} ${IMAGE_TAG}\"]" \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "SSM Command ID: ${COMMAND_ID}"
+
+          # Aguarda conclusao em todas as instancias (timeout ~3 min)
+          for i in $(seq 1 36); do
+            STATUSES=$(aws ssm list-command-invocations \
+              --command-id "${COMMAND_ID}" \
+              --query "CommandInvocations[].Status" \
+              --output text)
+
+            echo "[Tentativa ${i}/36] Status nas EC2: ${STATUSES:-Aguardando...}"
+
+            if [[ -n "${STATUSES}" ]] && ! echo "${STATUSES}" | grep -qE "Pending|InProgress|Delayed"; then
+              break
+            fi
+            sleep 5
+          done
+
+          # Imprime os logs de app1 e app2 direto na aba Actions do GitHub
+          FAILED=0
+          INSTANCE_IDS=$(aws ssm list-command-invocations \
+            --command-id "${COMMAND_ID}" \
+            --query "CommandInvocations[].InstanceId" \
+            --output text)
+
+          if [[ -z "${INSTANCE_IDS}" ]]; then
+            echo "ERRO: Nenhuma instancia EC2 encontrada com tags Ambiente=${ENVIRONMENT} e Role=Application."
+            exit 1
+          fi
+
+          for INSTANCE_ID in ${INSTANCE_IDS}; do
+            echo "=================================================================="
+            echo "RESULTADO NA INSTANCIA: ${INSTANCE_ID}"
+            echo "=================================================================="
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "${COMMAND_ID}" \
+              --instance-id "${INSTANCE_ID}" \
+              --query "Status" --output text)
+
+            echo "Status: ${STATUS}"
+            echo "--- STDOUT ---"
+            aws ssm get-command-invocation \
+              --command-id "${COMMAND_ID}" \
+              --instance-id "${INSTANCE_ID}" \
+              --query "StandardOutputContent" --output text
+
+            STDERR=$(aws ssm get-command-invocation \
+              --command-id "${COMMAND_ID}" \
+              --instance-id "${INSTANCE_ID}" \
+              --query "StandardErrorContent" --output text)
+            if [[ -n "${STDERR}" && "${STDERR}" != "None" ]]; then
+              echo "--- STDERR ---"
+              echo "${STDERR}"
+            fi
+
+            if [[ "${STATUS}" != "Success" ]]; then
+              FAILED=1
+            fi
+          done
+
+          if [[ "${FAILED}" -ne 0 ]]; then
+            echo "ERRO: Deploy falhou em uma ou mais instancias!"
+            exit 1
+          fi
+
+          echo "==> Deploy de ${SERVICE_NAME}:${IMAGE_TAG} concluido em todas as instancias!"

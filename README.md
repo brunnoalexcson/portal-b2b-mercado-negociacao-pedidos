@@ -7,7 +7,7 @@ Projeto da disciplina de Sistemas Distribuídos. Este repositório reúne os ser
 | Serviço | Responsabilidade | Situação |
 | --- | --- | --- |
 | [Mercado](docs/mercado/) | Calcular oferta × demanda por produto, mostrar a vitrine pelo menor preço, abrir a negociação direta e iniciar leilões em lote quando a demanda supera a oferta. | Especificação ESP-MRC-001 v0.12 no modelo ERS-LLM do QA, com contratos de eventos. Código em `services/mercado-service/`, com 205 testes e demonstração local. |
-| [Negociação/Leilão](docs/negociacao/) | Conduzir os leilões que o Mercado inicia e as negociações diretas e publicar o resultado para Pedidos e Mercado. | Especificação ESP-NEG-001 v1.5 no modelo ERS-LLM do QA, com contratos de eventos. Código em `services/negociacao-service/`, com 186 testes e demonstração local. |
+| [Negociação/Leilão](docs/negociacao/) | Conduzir os leilões que o Mercado inicia e as negociações diretas e publicar o resultado para Pedidos e Mercado. | Especificação ESP-NEG-001 v1.6 no modelo ERS-LLM do QA, com contratos de eventos. Código em `services/negociacao-service/`, com 188 testes, demonstração local e deploy na AWS do kit. |
 | [Pedidos](docs/pedidos/) | Criar o pedido temporário que reserva o estoque na abertura da negociação, efetivar ou cancelar no fechamento e acompanhar destino, frete e entrega. | Especificação ESP-PED-001 v2.2 no modelo ERS-LLM do QA, com contratos de eventos. Código do primeiro fluxo (v1.1) em `services/pedidos-service/`, a adaptar à v2.2. |
 
 ## Fluxo de Pedidos
