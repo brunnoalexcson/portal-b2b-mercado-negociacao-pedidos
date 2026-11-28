@@ -1,0 +1,34 @@
+# Só para o teste integrado local: emissor de tokens de teste, portas no host e build com a rede do host.
+x-rede-host: &rede-host
+  network: host
+services:
+  identity-teste:
+    image: negociacao-demo-identity
+    command: ["uvicorn", "tests.demo_identity:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports: ["127.0.0.1:28100:8000"]
+    networks: [portal-net]
+  app1-mercado:
+    build: *rede-host
+    ports: ["127.0.0.1:28105:8105"]
+  app2-mercado:
+    build: *rede-host
+  mercado-migrate:
+    build: *rede-host
+  app1-negociacao:
+    build: *rede-host
+    ports: ["127.0.0.1:28106:8106"]
+  app2-negociacao:
+    build: *rede-host
+  negociacao-migrate:
+    build: *rede-host
+  app1-pedidos:
+    build: *rede-host
+    ports: ["127.0.0.1:28107:8107"]
+  app2-pedidos:
+    build: *rede-host
+  pedidos-migrate:
+    build: *rede-host
+    depends_on: [pg-primary]
+  # o kit trava na primeira subida: o CREATE DATABASE do init espera a réplica síncrona, que não conecta durante o init
+  pg-primary:
+    command: ["postgres", "-c", "wal_level=replica", "-c", "max_wal_senders=10", "-c", "max_replication_slots=10"]

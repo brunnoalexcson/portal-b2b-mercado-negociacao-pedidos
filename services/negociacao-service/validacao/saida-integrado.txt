@@ -1,0 +1,51 @@
+Saída do roteiro_integrado.py em 28/11/2026 (UTC), cenário 951147. Linhas longas cortadas na leitura do terminal.
+
+$ python roteiro_integrado.py direta && python roteiro_integrado.py leilao
+Cenário 951147: produto, ofertas X (8.00 x 60) e Y (7.50 x 40), demandas A (50) e B (80)
+
+1. Direta com propostas: Comprador A abre no Mercado (demanda A, oferta Y, 10)
+  ok  POST /mercado/negociacoes → 201
+  Negociação 4c1bc0da-3004-47f6-9011-6d308f890573: ABERTO, reserva PENDENTE, vez BUYER, precoOferta 7.50
+  Pedidos: 1 pedido CRIADO, reserva PENDENTE, comprador None
+  ok  POST /negociacoes/4c1bc0da-3004-47f6-9011-6d308f890573/aceitar → 409
+  Fornecimento confirmou a reserva → Pedidos → pedido_atualizado → Negociação: CONFIRMADA
+  ok  POST /negociacoes/4c1bc0da-3004-47f6-9011-6d308f890573/propostas → 201
+  ok  POST /negociacoes/4c1bc0da-3004-47f6-9011-6d308f890573/aceitar → 200
+  Negociação: ENCERRADO a 7.00
+  Pedidos: VENDA_CONCLUIDA, comprador comprador-a-951147, valor 70.00
+  Mercado: negociação CONCLUIDA; demanda A: {"demandaId": "demanda-a-951147", "demandaOrigemId": null, "produtoId": "milho-951147", "unidade": "TON", "quantidade": "50.00", "saldo": "40.00", "emNegociacao": "0.00", "saldoNegociavel": "40.00", "precoMaximo": "9
+
+2. Compra imediata: Comprador B (demanda B, oferta X, 5)
+  ok  POST /mercado/negociacoes → 201
+  Negociação a5199ad8-ba7e-4c08-8a52-a0298d2f6958: ENCERRADO a 8.00; Pedidos: VENDA_CONCLUIDA, comprador comprador-b-951147, valor 40.00
+
+DIRETA OK
+
+3. Leilão (cenário 951147)
+  Sugestão 258f66e7-1804-403b-8aa8-17a4d2af60ff: ABERTA, excesso 30.00
+  Saldo das ofertas no Mercado: {"oferta-y-951147": "30.00", "oferta-x-951147": "55.00"}
+  ok  POST /mercado/sugestoes-leilao/258f66e7-1804-403b-8aa8-17a4d2af60ff/aceites → 201
+  ok  POST /mercado/sugestoes-leilao/258f66e7-1804-403b-8aa8-17a4d2af60ff/aceites → 201
+  Aceites: CONVERTIDA, leilão dc687a26-9111-4c6d-977b-98b15be8ed4d
+  Negociação: AGUARDANDO_RESERVAS, precoInicial 665.00, incremento 6.65, dataFim 2026-11-28T02:22:19.838Z, ofertas ['PENDENTE', 'PENDENTE']
+  Reservas confirmadas: ABERTO, acoes ['DAR_LANCE']
+  ok  POST /negociacoes/dc687a26-9111-4c6d-977b-98b15be8ed4d/lances → 201
+  ok  POST /negociacoes/dc687a26-9111-4c6d-977b-98b15be8ed4d/lances → 201
+
+LEILÃO ABERTO: vencedor esperado Comprador B com 671.65; encerra em 2026-11-28T02:22:19.838Z
+
+$ psql: UPDATE negociacao.processo_negociacao SET data_fim = now() + interval '5 seconds' WHERE id = 'dc687a26-9111-4c6d-977b-98b15be8ed4d'
+2026-11-28 01:32:15.752321+00
+UPDATE 1
+
+$ python roteiro_integrado.py fechar
+4. Encerramento: ENCERRADO, comprador comprador-b-951147, melhor 671.65
+  Pedidos: [('oferta-x-951147', 'comprador-b-951147', Decimal('444.40')), ('oferta-y-951147', 'comprador-b-951147', Decimal('227.25'))]; soma 671.65 (lance 671.65)
+  Mercado: leilão CONCLUIDA; demanda B: {"demandaId": "demanda-b-951147", "demandaOrigemId": null, "produtoId": "milho-951147", "unidade": "TON", "quantidade": "80.00", "saldo": "0.00", "emNegociacao": "0.00", "saldoNegociavel": "0.00", "precoMaximo": null, "destino": {"uf": "GO", "cidade": "Goiânia"}, "prazoDesejado": null, "situaca
+
+LEILÃO OK
+
+$ rpk topic describe <dlt> -p   (soma das marcas d'água, depois de todas as rodadas)
+mercado.dlt: 0
+negociacao.dlt: 0
+pedidos.dlt: 0
