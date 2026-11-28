@@ -99,6 +99,8 @@ def abrir():
             corpo = resposta.json()
             print(f"{nome}: {negociacao_id}\n  status {corpo.get('status')}, reserva {corpo.get('reservaSituacao')},"
                   f" compraImediata {corpo.get('compraImediata')}, acoesPermitidas {corpo.get('acoesPermitidas')}")
+    print(f"\nSufixo das empresas: {SUFIXO}. Os mesmos tokens, e outros perfis, em "
+          f"http://localhost:18107/docs → GET /tokens com o sufixo.")
     print("\nTokens (2 h), para o Authorize do /docs:")
     for nome, valor in tokens.items():
         print(f"\n{nome}:\n{valor}")
@@ -162,6 +164,8 @@ def abrir_leilao(minutos=120):
     for oferta in corpo.get("ofertas", []):
         print(f"  oferta {oferta['fornecimentoId']} de {oferta['fornecedorId']}: {oferta['valorItem']},"
               f" participação {oferta['participacao']}, {oferta['situacao']}")
+    print(f"\nSufixo das empresas: {SUFIXO}. Os mesmos tokens, e outros perfis, em "
+          f"http://localhost:18107/docs → GET /tokens com o sufixo.")
     print("\nTokens (2 h), para o Authorize do /docs:")
     for nome, valor in tokens.items():
         print(f"\n{nome}:\n{valor}")

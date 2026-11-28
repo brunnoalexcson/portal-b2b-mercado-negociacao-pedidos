@@ -134,3 +134,23 @@ def test_duas_aplicacoes_nao_somam_metricas():
     cliente().get("/health")
 
     assert 'rota="/health"' not in cliente().get("/metrics").text
+
+
+def test_swagger_documenta_toda_rota_e_poe_o_cadeado_so_nas_de_negocio():
+    caminhos = cliente().get("/openapi.json").json()["paths"]
+
+    for caminho, metodos in caminhos.items():
+        for metodo, operacao in metodos.items():
+            assert operacao["summary"].startswith("API-") and operacao["description"] and operacao["tags"], caminho
+            cadeado = [{"HTTPBearer": []}] if caminho.startswith("/api/") else None
+            assert operacao.get("security") == cadeado, (metodo, caminho)
+    assert len([m for metodos in caminhos.values() for m in metodos]) == 11
+
+
+def test_swagger_traz_um_exemplo_problem_json_por_codigo_de_erro():
+    operacao = cliente().get("/openapi.json").json()["paths"]["/api/v1/negociacoes/{negociacaoId}/lances"]["post"]
+
+    exemplos = operacao["responses"]["409"]["content"]["application/problem+json"]["examples"]
+    assert set(exemplos) == {"MODO_INCOMPATIVEL", "IDEMPOTENCIA_CONFLITO", "LEILAO_NAO_ABERTO"}
+    assert exemplos["LEILAO_NAO_ABERTO"]["value"]["detail"] == "O leilão não está aceitando lances."
+    assert set(exemplos["LEILAO_NAO_ABERTO"]["value"]) == CHAVES_DO_ERRO

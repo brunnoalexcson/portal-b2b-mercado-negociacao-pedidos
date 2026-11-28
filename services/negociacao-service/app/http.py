@@ -5,12 +5,14 @@ from datetime import timezone
 from uuid import uuid4
 
 import jwt
-from fastapi import Request
+from fastapi import Depends, Request
+from fastapi.security import HTTPBearer
 from prometheus_client import CollectorRegistry, Counter, Histogram, generate_latest
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import Response
 
 from app import contratos
+from app.documentacao import documentar
 from app.dominio import Ator, ErroNegocio, Idempotencia
 from app.jsonio import dumps, fingerprint, loads
 from app.portas import RepositorioIndisponivel
@@ -44,16 +46,8 @@ ERROS = {
 MODOS = ("LEILAO_DIRETO", "VENDA_DIRETA")
 ESCOPOS = ("BUYER", "SUPPLIER")
 STATUS = ("AGUARDANDO_RESERVAS", "ABERTO", "ENCERRADO", "DESERTO", "RECUSADO", "EXPIRADO")
-# só documentam no /docs o cabeçalho e o corpo das escritas; a validação continua em `escrever`
-CHAVE_OPENAPI = {"parameters": [{"name": "Idempotency-Key", "in": "header", "required": False,
-                                 "schema": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"}}]}
-PROPOSTA_OPENAPI = {**CHAVE_OPENAPI, "requestBody": {"required": True, "content": {"application/json": {"schema": {
-    "type": "object", "additionalProperties": False, "required": ["precoUnitario"],
-    "properties": {"precoUnitario": {"type": "number", "exclusiveMinimum": 0, "maximum": 999999999999.99}}}}}}}
-LANCE_OPENAPI = {**CHAVE_OPENAPI, "requestBody": {"required": True, "content": {"application/json": {"schema": {
-    "type": "object", "additionalProperties": False, "required": ["valor"],
-    "properties": {"valor": {"type": "number", "exclusiveMinimum": 0, "maximum": 999999999999.99},
-                   "demandaId": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9._-]{1,64}$"}}}}}}}
+# só põe o cadeado do Authorize no /docs: sem token ele devolve None, e quem responde 401 é `autenticar`
+BEARER = [Depends(HTTPBearer(auto_error=False, bearerFormat="JWT"))]
 # o PyJWT só confere a assinatura: expiração, emissor e audiência são comparados aqui, com o relógio da porta
 OPCOES_JWT = {"verify_exp": False, "verify_nbf": False, "verify_iat": False, "verify_aud": False,
               "verify_iss": False}
@@ -235,51 +229,51 @@ def configurar_http(app):
                         headers={"Content-Type": "text/plain; version=0.0.4; charset=utf-8"})
 
     # rotas síncronas: o FastAPI as roda fora do laço de eventos, junto com o banco e o JWKS
-    @app.get("/api/v1/negociacoes")
+    @app.get("/api/v1/negociacoes", dependencies=BEARER)
     def listar(request: Request):
         ator = autenticar(request)
         pagina, tamanho = pagina_e_tamanho(request)
         modo, status = filtro(request, "modo", MODOS), filtro(request, "status", STATUS)
         return json_response(request.app.state.servico.listar(ator, modo, status, pagina, tamanho))
 
-    @app.get("/api/v1/negociacoes/{negociacaoId}")
+    @app.get("/api/v1/negociacoes/{negociacaoId}", dependencies=BEARER)
     def detalhe(negociacaoId: str, request: Request):
         ator = autenticar(request)
         return json_response(request.app.state.servico.detalhe(ator, negociacao_id(negociacaoId)))
 
-    @app.get("/api/v1/negociacoes/{negociacaoId}/lances")
+    @app.get("/api/v1/negociacoes/{negociacaoId}/lances", dependencies=BEARER)
     def lances(negociacaoId: str, request: Request):
         ator = autenticar(request)
         identificador = negociacao_id(negociacaoId)
         pagina, tamanho = pagina_e_tamanho(request)
         return json_response(request.app.state.servico.lances(ator, identificador, pagina, tamanho))
 
-    @app.post("/api/v1/negociacoes/{negociacaoId}/lances", openapi_extra=LANCE_OPENAPI)
+    @app.post("/api/v1/negociacoes/{negociacaoId}/lances", dependencies=BEARER)
     async def dar_lance(negociacaoId: str, request: Request):
         def acao(servico, ator, identificador, corpo, correlacao, idempotencia):
             return servico.dar_lance(ator, identificador, corpo, correlacao, idempotencia)
         return await escrever(request, negociacaoId, acao, contratos.corpo_lance, 201, ("BUYER",))
 
-    @app.get("/api/v1/negociacoes/{negociacaoId}/propostas")
+    @app.get("/api/v1/negociacoes/{negociacaoId}/propostas", dependencies=BEARER)
     def propostas(negociacaoId: str, request: Request):
         ator = autenticar(request)
         identificador = negociacao_id(negociacaoId)
         pagina, tamanho = pagina_e_tamanho(request)
         return json_response(request.app.state.servico.propostas(ator, identificador, pagina, tamanho))
 
-    @app.post("/api/v1/negociacoes/{negociacaoId}/propostas", openapi_extra=PROPOSTA_OPENAPI)
+    @app.post("/api/v1/negociacoes/{negociacaoId}/propostas", dependencies=BEARER)
     async def propor(negociacaoId: str, request: Request):
         def acao(servico, ator, identificador, preco, correlacao, idempotencia):
             return servico.propor(ator, identificador, preco, correlacao, idempotencia)
         return await escrever(request, negociacaoId, acao, contratos.corpo_proposta, 201)
 
-    @app.post("/api/v1/negociacoes/{negociacaoId}/aceitar", openapi_extra=CHAVE_OPENAPI)
+    @app.post("/api/v1/negociacoes/{negociacaoId}/aceitar", dependencies=BEARER)
     async def aceitar(negociacaoId: str, request: Request):
         def acao(servico, ator, identificador, _vazio, correlacao, idempotencia):
             return servico.aceitar(ator, identificador, correlacao, idempotencia)
         return await escrever(request, negociacaoId, acao, contratos.corpo_vazio, 200)
 
-    @app.post("/api/v1/negociacoes/{negociacaoId}/recusar", openapi_extra=CHAVE_OPENAPI)
+    @app.post("/api/v1/negociacoes/{negociacaoId}/recusar", dependencies=BEARER)
     async def recusar(negociacaoId: str, request: Request):
         def acao(servico, ator, identificador, _vazio, correlacao, idempotencia):
             return servico.recusar(ator, identificador, correlacao, idempotencia)
@@ -297,3 +291,4 @@ def configurar_http(app):
     app.add_exception_handler(ErroNegocio, negocio)
     app.add_exception_handler(RepositorioIndisponivel, dependencia)
     app.add_exception_handler(Exception, interno)
+    documentar(app, ERROS)

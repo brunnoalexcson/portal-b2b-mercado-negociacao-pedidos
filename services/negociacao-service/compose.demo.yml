@@ -10,10 +10,6 @@ x-app: &app
   build:
     context: .
     target: runtime
-  # Mesma aplicação de criar_app_real; demo/app_demo.py só declara o Bearer no OpenAPI (botão Authorize do /docs).
-  command: ["uvicorn", "demo.app_demo:criar", "--factory", "--host", "0.0.0.0", "--port", "8106"]
-  volumes:
-    - ./demo:/srv/negociacao/demo:ro
   environment:
     DATABASE_URL: postgresql://svc_negociacao:negociacao_demo_app@db:5432/portal_b2b
     KAFKA_BOOTSTRAP_SERVERS: broker:9092
@@ -96,6 +92,8 @@ services:
   identity:
     build: *build-teste
     command: ["uvicorn", "tests.demo_identity:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:18107:8000"
 
   app1:
     <<: *app

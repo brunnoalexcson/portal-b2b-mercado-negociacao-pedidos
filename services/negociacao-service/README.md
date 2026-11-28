@@ -5,7 +5,7 @@ Implementação da [ESP-NEG-001](../../docs/negociacao/requisitos.md). Esta vers
 ## Estrutura
 
 - `app/dominio.py`: regras da negociação direta (vez, prazo, teto da proposta, ações permitidas, visibilidade, alocação) e do leilão (recálculo do lote, participações, lance mínimo, conflito de interesse, sigilo, rateio do lance vencedor), idempotência das escritas e o serviço `Negociacoes`, que as aplica sobre as portas de `app/portas.py`.
-- `app/contratos.py`: validação dos corpos HTTP e dos eventos consumidos e montagem dos publicados. `app/http.py`: rotas, JWT, RFC 7807, correlação e métricas.
+- `app/contratos.py`: validação dos corpos HTTP e dos eventos consumidos e montagem dos publicados. `app/http.py`: rotas, JWT, RFC 7807, correlação e métricas. `app/documentacao.py`: textos, esquemas e exemplos do `/docs`.
 - `app/main.py`: `create_app`, `executar_prazos` e `criar_app_real`.
 - `app/adaptadores/`: PostgreSQL (psycopg 3, pool ≤ 5), Kafka (outbox, publicador, consumidor, DLT) e JWKS.
 - `migracoes/versions/0001_negociacao.py`: schema `negociacao`, executado com a role `portal_ddl`.
@@ -36,6 +36,7 @@ O `--wait` só termina quando as duas réplicas respondem `/health/ready`. O `de
 
 - API e `/docs` em [localhost:18106/docs](http://localhost:18106/docs).
 - Redpanda Console em [localhost:18086](http://localhost:18086).
+- Emissor de tokens de teste em [localhost:18107/docs](http://localhost:18107/docs): `POST /token` para uma empresa e um escopo, e `GET /tokens` com os perfis prontos do `popular`. No ambiente real, o token vem do Identity-Service: `POST /api/v1/auth/login` e depois `POST /api/v1/auth/switch-context`, que escolhe a empresa e o escopo.
 - Prontidão em [localhost:18106/health/ready](http://localhost:18106/health/ready) e métricas em [localhost:18106/metrics](http://localhost:18106/metrics).
 
 Para parar mantendo os dados, ou para apagar tudo, inclusive os volumes:
@@ -48,6 +49,18 @@ docker compose -f compose.demo.yml stop
 docker compose -f compose.demo.yml down -v
 ```
 
+## Consultar e simular erros pelo Swagger
+
+1. Rode o `popular` (passo 2 do roteiro abaixo) e anote o sufixo das empresas que ele imprime.
+2. Em [localhost:18107/docs](http://localhost:18107/docs), chame `GET /tokens` com esse sufixo. Há tokens para:
+   - Comprador A e Comprador B;
+   - Fornecedor X, das diretas;
+   - Fornecedor A e Fornecedor B, donos das ofertas do leilão;
+   - Fornecedor A com escopo de compra, para o conflito de interesse;
+   - transportadora, login sem contexto e token expirado, para os erros 403 e 401.
+3. Abra [localhost:18106/docs](http://localhost:18106/docs), clique em **Authorize**, cole o token sem a palavra `Bearer` e confirme.
+4. Em cada rota, use **Try it out** e depois **Execute**. Cada status de erro mostra um exemplo por código. Para trocar de perfil, volte em **Authorize**, clique em **Logout** e cole outro token.
+
 ## Roteiro da apresentação
 
 **1. Subir a demo** com o comando da seção anterior.
@@ -58,7 +71,7 @@ docker compose -f compose.demo.yml down -v
 docker compose -f compose.demo.yml run --build --rm --no-deps popular
 ```
 
-Ele imprime os dois `negociacaoId` e um token de 2 h para o Comprador A, o Fornecedor X e o Comprador B, que não participa. Deixe essa saída aberta para copiar.
+Ele imprime os dois `negociacaoId`, o sufixo das empresas e um token de 2 h para o Comprador A, o Fornecedor X e o Comprador B, que não participa. Deixe essa saída aberta para copiar. Os mesmos tokens, e os perfis da transportadora, sem contexto e expirado, saem de `GET /tokens` no emissor, com esse sufixo.
 
 **3. Evento no Console:** em **Topics** → `pedido_temporario_solicitado`, há uma mensagem por negociação, com a chave igual ao `negociacaoId`, `tipo` `VENDA_DIRETA` e o preço da oferta.
 
