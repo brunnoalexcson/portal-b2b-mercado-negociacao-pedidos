@@ -15,6 +15,8 @@ from app.portas import ChavesPublicas, Clock, EventBus, PedidosRepositorio
 from app.servico import Metricas, Servico
 
 log = logging.getLogger("pedidos")
+# DECISÃO: sem JWKS_URL (o docker-compose.aws.yml do kit não injeta), usa a JWKS do usuarios-service na rede interna.
+JWKS_PADRAO = "http://usuarios-service:8101/.well-known/jwks.json"
 
 
 def create_app(event_bus: EventBus, clock: Clock, repositorio: PedidosRepositorio, chaves_publicas: ChavesPublicas,
@@ -89,7 +91,7 @@ def criar_app_real() -> FastAPI:
     repositorio = PostgresRepositorio(os.environ["DATABASE_URL"])
     bus = KafkaEventBus(repositorio, os.environ["KAFKA_BOOTSTRAP_SERVERS"],
                         os.getenv("KAFKA_GROUP_ID", "pedidos-service-v1"))
-    app = create_app(bus, RelogioSistema(), repositorio, ChavesJwks(os.environ["JWKS_URL"]),
+    app = create_app(bus, RelogioSistema(), repositorio, ChavesJwks(os.getenv("JWKS_URL", JWKS_PADRAO)),
                      os.getenv("JWT_ISSUER", "identity-service"), os.getenv("JWT_AUDIENCE", "b2b-platform"))
     bus.metricas = app.state.metricas
 

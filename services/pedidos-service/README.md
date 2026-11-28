@@ -134,3 +134,19 @@ Para parar o ambiente, use `docker compose -f compose.demo.yml stop`. Para apaga
 O [override do Compose](compose.pedidos.yml) aponta `app1-pedidos` e `app2-pedidos` para este projeto. Use as variáveis de [.env.example](.env.example), o schema `pedidos`, a role de aplicação `svc_pedidos` e a role de migração fornecida pela Infra.
 
 A migração começa com `DROP TABLE IF EXISTS` das tabelas de exemplo que o `database/01-init.sql` do kit cria no schema `pedidos`.
+
+## Deploy na AWS (ambiente de integração do kit)
+
+O workflow `.github/workflows/deploy-pedidos.yml`, na raiz do repositório do grupo, segue o modelo do kit. Ele constrói a imagem a partir de `services/pedidos-service` e publica em `app1` e `app2` a cada push na `main` que mexa nessa pasta. Também dá para rodar manualmente, em **Actions → Run workflow**.
+
+O container lê as variáveis que o `docker-compose.aws.yml` do kit injeta: `DATABASE_URL` e `KAFKA_BOOTSTRAP_SERVERS`.
+
+| Variável | Sem ela |
+|---|---|
+| `JWKS_URL` | Usa `http://usuarios-service:8101/.well-known/jwks.json` (rede interna da AWS) |
+| `MIGRATION_DATABASE_URL` (role `portal_ddl`) | O container não migra; a Infra precisa aplicar a migração `0001` |
+| `KAFKA_GROUP_ID` | `pedidos-service-v1` |
+
+Quando `MIGRATION_DATABASE_URL` existe, o container roda `alembic upgrade head` antes de subir. Uma trava no banco serializa as duas réplicas.
+
+O `/health/ready` só responde 200 com os 14 tópicos do Pedidos criados no broker.

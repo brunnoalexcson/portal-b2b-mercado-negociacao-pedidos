@@ -2,6 +2,7 @@
 import re
 from contextlib import contextmanager
 from contextvars import ContextVar
+from decimal import Decimal
 from functools import wraps
 from uuid import UUID
 
@@ -216,8 +217,10 @@ class PostgresRepositorio:
     def _pendente(linha):
         if linha is None:
             return None
+        # O JSON devolve 5 (inteiro) para uma quantidade 5.00; as regras de valor e peso precisam de Decimal.
+        payload = {**linha["payload"], **{c: Decimal(str(linha["payload"][c])) for c in ("quantidade", "precoUnitario")}}
         return {"negociacaoId": linha["negociacao_id"], "fornecimentoId": linha["fornecimento_id"],
-                "payload": linha["payload"], "eventId": str(linha["event_id"]),
+                "payload": payload, "eventId": str(linha["event_id"]),
                 "correlationId": linha["correlation_id"], "causa": linha["causa"], "recebidoEm": linha["recebido_em"]}
 
     @traduzir
